@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, ClipboardList, QrCode, LogOut, Menu, X, UserCheck, Search, Camera, CameraOff
 } from 'lucide-react';
 
-// --- Type Definitions (No change) ---
+// --- Type Definitions ---
 type ActivitySchedule = {
   id?: number;
   activity_id?: number;
@@ -43,7 +43,7 @@ type AttendanceRecord = Student & {
   statusType: 'success' | 'error' | 'warning';
 };
 
-// --- Reusable UI Components (No change) ---
+// --- Reusable UI Components ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
     const isActive = pathname.startsWith(href);
@@ -79,6 +79,31 @@ const Button: React.FC<
   );
 };
 
+// --- Sidebar Content Component ---
+const SidebarContent = () => (
+    <div className="flex h-full max-h-screen flex-col gap-2">
+        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+            <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+                <UserCheck className="h-6 w-6 text-green-600" />
+                <span>Student Activity</span>
+            </Link>
+        </div>
+        <div className="flex-1">
+            <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+                <NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
+                <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
+                <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
+                <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
+            </nav>
+        </div>
+        <div className="mt-auto p-4">
+            <Link href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800">
+                <LogOut className="h-5 w-5" /> Logout
+            </Link>
+        </div>
+    </div>
+);
+
 
 // --- Main Scan Attendance Page Component ---
 export default function ScanAttendancePage() {
@@ -102,7 +127,7 @@ export default function ScanAttendancePage() {
   useEffect(() => {
     const scannerId = 'reader';
     const html5QrCode = new Html5Qrcode(scannerId);
-    let isProcessing = false; // Simple lock to prevent re-entry
+    let isProcessing = false;
 
     const determineAttendanceStatus = (activity: Activity): { status: string, type: 'success'|'warning'|'error' } => {
         const now = new Date();
@@ -133,8 +158,8 @@ export default function ScanAttendancePage() {
     };
 
     const processScan = async (decodedText: string) => {
-        if (isProcessing) return; // Ayaw i-process kung naa pay ga-dagan
-        isProcessing = true; // I-lock para dili mag-double scan
+        if (isProcessing) return;
+        isProcessing = true;
 
         try {
             let studentId: string;
@@ -183,7 +208,6 @@ export default function ScanAttendancePage() {
             const newRecord: AttendanceRecord = { ...studentData, scanTime: new Date().toLocaleTimeString(), status: attendance.status, statusType: attendance.type };
             setScannedStudents(prev => [newRecord, ...prev]);
         } finally {
-            // ✅ I-release ang lock human sa timer
             setTimeout(() => {
                 isProcessing = false;
             }, 2500);
@@ -234,29 +258,24 @@ export default function ScanAttendancePage() {
 
   return (
     <div className={`grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
-      {/* Sidebar */}
+      {/* Sidebar for Desktop */}
       <div className="hidden border-r bg-white md:block dark:bg-gray-900/40 dark:border-gray-800">
-        <div className="flex h-full max-h-screen flex-col gap-2">
-            <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-                <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-                <UserCheck className="h-6 w-6 text-green-600" />
-                <span>Student Activity</span>
-                </Link>
-            </div>
-            <div className="flex-1">
-                <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-                    <NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
-                    <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
-                    <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
-                    <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
-                </nav>
-            </div>
-            <div className="mt-auto p-4">
-                <Link href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800">
-                <LogOut className="h-5 w-5" /> Logout
-                </Link>
-            </div>
-        </div>
+        <SidebarContent />
+      </div>
+
+      {/* Mobile Sidebar (and backdrop) */}
+      <div
+        className={`fixed inset-0 z-30  transition-opacity duration-300 md:hidden ${
+            isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setSidebarOpen(false)}
+      ></div>
+      <div
+        className={`fixed top-0 left-0 h-full w-[280px] border-r bg-white dark:bg-gray-900/40 dark:border-gray-800 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <SidebarContent />
       </div>
 
       {/* Main Content */}
@@ -269,10 +288,8 @@ export default function ScanAttendancePage() {
         </header>
 
         <main className={`flex flex-1 flex-col gap-6 p-4 lg:p-6 bg-gray-100/40 dark:bg-gray-800/40`}>
-            {/* Top Section */}
             <div className="grid md:grid-cols-2 gap-6">
                 <div className='bg-white p-6 rounded-lg shadow-md dark:bg-gray-900'>
-                    <label htmlFor="activity-search" className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">1. Select Activity</label>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                         <input
@@ -305,36 +322,32 @@ export default function ScanAttendancePage() {
                             <p className="text-4xl font-bold text-green-600 tracking-wider">{currentDateTime.toLocaleTimeString()}</p>
                         </>
                     ) : (
-                        <>
-                            <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">&nbsp;</p>
-                            <p className="text-4xl font-bold text-green-600 tracking-wider">--:--:-- --</p>
-                        </>
+                        <p className="text-4xl font-bold text-green-600 tracking-wider">Loading...</p>
                     )}
                 </div>
             </div>
 
-            {/* Middle Section: Scanner */}
             <div className='bg-white p-6 rounded-lg shadow-md dark:bg-gray-900'>
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className='text-lg font-semibold'>2. QR Code Scanner</h2>
+                <div className="flex justify-center items-center mb-4">
                     <Button onClick={() => setCameraOn(prev => !prev)} disabled={!selectedActivity} className='w-auto flex items-center gap-2' variant={isCameraOn ? 'secondary' : 'primary'}>
                         {isCameraOn ? <><CameraOff size={18}/> Stop Scanner</> : <><Camera size={18}/> Start Scanner</>}
                     </Button>
                 </div>
-                <div className='w-full max-w-md mx-auto aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center'>
+                <div className="w-full max-w-md mx-auto bg-gray-200 dark:bg-gray-700  overflow-hidden relative">
                     <div id="reader" className="w-full"></div>
                     {!isCameraOn && (
-                         <div className='text-center text-gray-500 -mt-10'>
-                            <CameraOff size={48} className='mx-auto mb-2'/>
-                            <p>{!selectedActivity ? "Please select an activity first." : "Scanner is off."}</p>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                        <CameraOff size={48} className="mb-2" />
+                        <p>
+                            {!selectedActivity ? "Please select an activity first." : "Scanner is off."}
+                        </p>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Bottom Section: Scanned Students Table */}
             <div className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-900">
-                <h2 className='text-lg font-semibold mb-4'>3. Scanned Students Log</h2>
+                <h3 className="font-semibold text-lg mb-4">Scanned Students Log</h3>
                 <div className="overflow-x-auto max-h-96">
                     <table className="w-full text-sm text-left">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 sticky top-0">
