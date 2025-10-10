@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+// ADDED: Import useRouter for redirection
+import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Html5Qrcode } from 'html5-qrcode';
 import Swal from 'sweetalert2';
@@ -80,7 +81,8 @@ const Button: React.FC<
 };
 
 // --- Sidebar Content Component ---
-const SidebarContent = () => (
+// CHANGED: This now accepts an onLogout function to properly sign out the user
+const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
     <div className="flex h-full max-h-screen flex-col gap-2">
         <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
             <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
@@ -97,10 +99,11 @@ const SidebarContent = () => (
             </nav>
         </div>
         <div className="mt-auto p-4">
-            <Link href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800">
+            <button onClick={onLogout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800">
                 <LogOut className="h-5 w-5" /> Logout
-            </Link>
+            </button>
         </div>
+        <div className="container mx-auto text-center px-4"> <p className="text-sm text-gray-600 dark:text-gray-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
     </div>
 );
 
@@ -117,6 +120,9 @@ export default function ScanAttendancePage() {
   
   const [isCameraOn, setCameraOn] = useState(false);
   const [scannedStudents, setScannedStudents] = useState<AttendanceRecord[]>([]);
+
+  // ADDED: Initialize router for navigation
+  const router = useRouter();
 
   useEffect(() => {
     setCurrentDateTime(new Date()); 
@@ -143,7 +149,7 @@ export default function ScanAttendancePage() {
             return date;
         };
 
-        const gracePeriod = 120 * 60000;
+        const gracePeriod = 120 * 60000; // 120 minutes
         const amIn = parseTime(todaySchedule.am_in);
         const amOut = parseTime(todaySchedule.am_out);
         const pmIn = parseTime(todaySchedule.pm_in);
@@ -175,6 +181,7 @@ export default function ScanAttendancePage() {
                 return;
             }
 
+            // RLS NOTE: This query will ONLY find a student if they were created by the currently logged-in user.
             const { data: studentData, error: studentError } = await supabase.from('students').select('student_id, full_name, gender, course, year_level').eq('student_id', studentId).single();
             if (studentError || !studentData) {
                 await Swal.fire({ icon: 'error', title: 'Not Found', text: `Student ID "${studentId}" not found.`, timer: 2500, showConfirmButton: false });
@@ -187,6 +194,7 @@ export default function ScanAttendancePage() {
                 return;
             }
 
+            // RLS NOTE: This query will only find a record if it belongs to an activity owned by the current user.
             const { data: existingRecord, error: checkError } = await supabase.from('attendance_report').select('id').eq('activity_id', selectedActivity!.id).eq('student_id', studentId).eq('status', attendance.status).maybeSingle();
             if (checkError) {
                 await Swal.fire({ icon: 'error', title: 'Database Error', text: `Could not verify attendance: ${checkError.message}`, timer: 2500, showConfirmButton: false });
@@ -198,6 +206,7 @@ export default function ScanAttendancePage() {
                 return;
             }
 
+            // RLS NOTE: This insert will FAIL if the activity_id does not belong to the current user.
             const { error: insertError } = await supabase.from('attendance_report').insert({ activity_id: selectedActivity!.id, student_id: studentData.student_id, status: attendance.status, scanned_at: new Date().toISOString() });
             if (insertError) {
                 await Swal.fire({ icon: 'error', title: 'Database Error', text: `Could not save attendance: ${insertError.message}`, timer: 2500, showConfirmButton: false });
@@ -232,6 +241,7 @@ export default function ScanAttendancePage() {
 
   useEffect(() => {
     const fetchActivities = async () => {
+      // RLS NOTE: This query automatically returns only the activities for the logged-in user.
       const { data } = await supabase.from('activities').select('*, activity_schedules(*)');
       if (data) setAllActivities(data);
     };
@@ -256,16 +266,26 @@ export default function ScanAttendancePage() {
     setScannedStudents([]);
   };
 
+  // ADDED: A proper logout function
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error && error.message !== 'Auth session missing!') {
+        console.error('Error logging out:', error.message);
+    } else {
+        router.push('/');
+    }
+  };
+
   return (
     <div className={`grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
       {/* Sidebar for Desktop */}
       <div className="hidden border-r bg-white md:block dark:bg-gray-900/40 dark:border-gray-800">
-        <SidebarContent />
+        <SidebarContent onLogout={handleLogout} />
       </div>
 
       {/* Mobile Sidebar (and backdrop) */}
       <div
-        className={`fixed inset-0 z-30  transition-opacity duration-300 md:hidden ${
+        className={`fixed inset-0 z-30 bg-black/40 transition-opacity duration-300 md:hidden ${
             isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => setSidebarOpen(false)}
@@ -275,7 +295,7 @@ export default function ScanAttendancePage() {
             isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <SidebarContent />
+        <SidebarContent onLogout={handleLogout} />
       </div>
 
       {/* Main Content */}
@@ -304,12 +324,12 @@ export default function ScanAttendancePage() {
                                 }
                             }}
                             placeholder="Search for an activity..."
-                            className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500"
+                            className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         />
                         {suggestions.length > 0 && (
-                            <ul className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            <ul className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto dark:bg-gray-800 dark:border-gray-600">
                                 {suggestions.map(activity => (
-                                    <li key={activity.id} onClick={() => handleSelectActivity(activity)} className="px-4 py-2 cursor-pointer hover:bg-gray-100">{activity.name}</li>
+                                    <li key={activity.id} onClick={() => handleSelectActivity(activity)} className="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">{activity.name}</li>
                                 ))}
                             </ul>
                         )}
@@ -333,12 +353,12 @@ export default function ScanAttendancePage() {
                         {isCameraOn ? <><CameraOff size={18}/> Stop Scanner</> : <><Camera size={18}/> Start Scanner</>}
                     </Button>
                 </div>
-                <div className="w-full max-w-md mx-auto bg-gray-200 dark:bg-gray-700  overflow-hidden relative">
+                <div className="w-full max-w-md mx-auto bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden relative">
                     <div id="reader" className="w-full"></div>
                     {!isCameraOn && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 p-4">
                         <CameraOff size={48} className="mb-2" />
-                        <p>
+                        <p className='text-center'>
                             {!selectedActivity ? "Please select an activity first." : "Scanner is off."}
                         </p>
                         </div>
@@ -362,7 +382,7 @@ export default function ScanAttendancePage() {
                         <tbody>
                             {scannedStudents.length > 0 ? (
                                 scannedStudents.map((student) => (
-                                    <tr key={`${student.student_id}-${student.status}`} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                                    <tr key={`${student.student_id}-${student.scanTime}`} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
                                         <td className="px-6 py-4 font-mono">{student.student_id}</td>
                                         <td className="px-6 py-4 font-medium">{student.full_name}</td>
                                         <td className="px-6 py-4">{student.course} - {student.year_level}</td>

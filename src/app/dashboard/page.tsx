@@ -78,6 +78,7 @@ const SidebarContent = () => {
           Logout
         </button>
       </div>
+      <div className="container mx-auto text-center px-4"> <p className="text-sm text-gray-600 dark:text-gray-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
     </div>
   );
 };

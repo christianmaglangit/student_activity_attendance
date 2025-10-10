@@ -27,6 +27,7 @@ type ActivityType = {
   start_date: string;
   end_date: string;
   created_at: string;
+  user_id: string; // <-- Idugang kini nga linya
   activity_schedules: ActivitySchedule[];
 };
 
@@ -104,6 +105,7 @@ const SidebarContent = () => {
             <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6"><Link href="/dashboard" className="flex items-center gap-2 font-semibold"><UserCheck className="h-6 w-6 text-green-600" /><span>Student Activity</span></Link></div>
             <div className="flex-1"><nav className="grid items-start px-2 text-sm font-medium lg:px-4"><NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink><NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink><NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink><NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink></nav></div>
             <div className="mt-auto p-4"><button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"><LogOut className="h-5 w-5" /> Logout</button></div>
+            <div className="container mx-auto text-center px-4"> <p className="text-sm text-gray-600 dark:text-gray-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
         </div>
     );
 };
@@ -133,7 +135,58 @@ export default function ActivityPage() {
   let currentDate = new Date(start); while (currentDate <= end) { const dateStr = currentDate.toISOString().split('T')[0]; const existingSchedule = selectedActivity?.activity_schedules.find(s => s.date === dateStr); newSchedules.push({ date: dateStr, am_in: existingSchedule?.am_in || '08:00', am_out: existingSchedule?.am_out || '12:00', pm_in: existingSchedule?.pm_in || '13:00', pm_out: existingSchedule?.pm_out || '17:00' }); currentDate.setDate(currentDate.getDate() + 1); } setSchedules(newSchedules); } else { setSchedules([]); } }, [startDate, endDate, selectedActivity]);
   const handleScheduleChange = (index: number, field: keyof Omit<ActivitySchedule, 'id' | 'activity_id' | 'date'>, value: string) => { const updatedSchedules = [...schedules]; updatedSchedules[index] = { ...updatedSchedules[index], [field]: value }; setSchedules(updatedSchedules); };
   const clearForm = () => { setActivityName(''); setStartDate(''); setEndDate(''); setSchedules([]); setMessage(''); setSelectedActivity(null); };
-  const handleAddActivity = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); const { data: d, error: err } = await supabase.from('activities').insert({ name: activityName, start_date: startDate, end_date: endDate }).select().single(); if (err) { setMessage(`Error: ${err.message}`); setLoading(false); return; } const s = schedules.map(sc => ({ ...sc, activity_id: d.id })); const { error: sErr } = await supabase.from('activity_schedules').insert(s); if (sErr) { setMessage(`Error: ${sErr.message}`); await supabase.from('activities').delete().eq('id', d.id); } else { setAddModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
+  const handleAddActivity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    // Step 1: Get the current logged-in user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        setMessage("Error: You must be logged in to create an activity.");
+        setLoading(false);
+        return;
+    }
+
+    // Step 2: Insert the new activity with the user's ID
+    const { data: newActivity, error: activityError } = await supabase
+        .from('activities')
+        .insert({
+            name: activityName,
+            start_date: startDate,
+            end_date: endDate,
+            user_id: user.id // <-- Important: Associate with the user
+        })
+        .select()
+        .single();
+
+    if (activityError) {
+        setMessage(`Error: ${activityError.message}`);
+        setLoading(false);
+        return;
+    }
+
+    // Step 3: Insert the corresponding schedules
+    const schedulesWithActivityId = schedules.map(sc => ({
+        ...sc,
+        activity_id: newActivity.id
+    }));
+
+    const { error: scheduleError } = await supabase
+        .from('activity_schedules')
+        .insert(schedulesWithActivityId);
+
+    if (scheduleError) {
+        setMessage(`Error saving schedules: ${scheduleError.message}`);
+        // If schedules fail, delete the activity we just created (rollback)
+        await supabase.from('activities').delete().eq('id', newActivity.id);
+    } else {
+        setAddModalOpen(false);
+        fetchActivities();
+        clearForm();
+    }
+
+    setLoading(false);
+};
   const handleUpdateActivity = async (e: React.FormEvent) => { e.preventDefault(); if (!selectedActivity) return; setLoading(true); const { error: uErr } = await supabase.from('activities').update({ name: activityName, start_date: startDate, end_date: endDate }).eq('id', selectedActivity.id); if (uErr) { setMessage(`Error: ${uErr.message}`); setLoading(false); return; } await supabase.from('activity_schedules').delete().eq('activity_id', selectedActivity.id); const s = schedules.map(sc => ({ ...sc, activity_id: selectedActivity.id })); const { error: iErr } = await supabase.from('activity_schedules').insert(s); if (iErr) { setMessage(`Error: ${iErr.message}`); } else { setEditModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
   const handleDeleteActivity = async () => { if (!selectedActivity) return; setLoading(true); const { error } = await supabase.from('activities').delete().eq('id', selectedActivity.id); if (error) { setMessage(`Error: ${error.message}`); } else { setDeleteModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
   const openEditModal = (activity: ActivityType) => { setSelectedActivity(activity); setActivityName(activity.name); setStartDate(activity.start_date); setEndDate(activity.end_date); setSchedules(activity.activity_schedules); setEditModalOpen(true); };
