@@ -220,8 +220,8 @@ export default function StudentListPage() {
     <>
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
         {qrToRender && (
-          <div ref={hiddenQrRef} className="bg-white p-6 rounded-lg text-center">
-            <QRCodeCanvas value={JSON.stringify({ student_id: qrToRender.student_id })} size={200} />
+          <div ref={hiddenQrRef} className="bg-white p-6 rounded-lg text-center items-center">
+            <QRCodeCanvas className="mx-auto flex justify-center" value={JSON.stringify({ student_id: qrToRender.student_id })} size={200} />
             <p className="font-bold text-lg mt-4 text-black">{qrToRender.full_name}</p>
             <p className="text-sm text-gray-600">{qrToRender.student_id}</p>
           </div>
@@ -343,7 +343,7 @@ export default function StudentListPage() {
             <Modal isOpen={modalState.type === 'qr'} onClose={closeModal} title="Student QR Code" size="sm">
               <div className="flex flex-col items-center gap-4">
                 <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center">
-                  <QRCodeCanvas value={JSON.stringify({ student_id: modalState.student.student_id })} size={200} className="mx-auto" />
+                  <QRCodeCanvas value={JSON.stringify({ student_id: modalState.student.student_id })} size={200} className="mx-auto flex justify-center" />
                   <p className="font-bold text-lg mt-4 text-black">{modalState.student.full_name}</p>
                   <p className="text-sm text-gray-600">{modalState.student.student_id}</p>
                 </div>
