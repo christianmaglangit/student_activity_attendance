@@ -289,7 +289,7 @@ export default function ActivityPage() {
         </header>
 
         <main className={`flex-1 overflow-y-auto p-4 lg:p-6`}>
-          <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+          <div className="flex justify-between items-center gap-4 mb-6">
               <div className="relative flex-grow max-w-xs">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input type="text" placeholder="Search activities..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border-2 bg-white border-gray-200 rounded-lg focus:outline-none focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" suppressHydrationWarning />
@@ -297,17 +297,12 @@ export default function ActivityPage() {
               <Button onClick={() => setAddModalOpen(true)} className="w-auto flex items-center gap-2"><CalendarPlus size={18} /> Add Activity</Button>
           </div>
           
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
             {loading ? <p>Loading...</p> : filteredActivities.length > 0 ? (
                 filteredActivities.map(activity => (
                     <div key={activity.id} className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-900 flex flex-col">
-                        <div className="flex justify-between items-start mb-2">
+                        <div className="flex justify-center  mb-2">
                             <h3 className="text-xl font-bold text-green-600 pr-2">{activity.name}</h3>
-                            <div className="flex items-center gap-3 flex-shrink-0">
-                                <button onClick={() => handleOpenReportModal(activity)} className="text-gray-400 hover:text-green-500"><FileText size={18} /></button>
-                                <button onClick={() => openEditModal(activity)} className="text-gray-400 hover:text-blue-500"><Pencil size={18} /></button>
-                                <button onClick={() => openDeleteModal(activity)} className="text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
-                            </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4"><CalendarDays size={16} /><span>{formatDate(activity.start_date)}</span>{activity.start_date !== activity.end_date && <><span>-</span><span>{formatDate(activity.end_date)}</span></>}</div>
                         <div className="flex-grow space-y-3 max-h-60 overflow-y-auto pr-2">
@@ -319,7 +314,13 @@ export default function ActivityPage() {
                             ))}
                             {activity.activity_schedules.length > 3 && <p className="text-center text-xs text-gray-500 mt-2">...and {activity.activity_schedules.length - 3} more days</p>}
                         </div>
+                        <div className="flex items-center justify-end gap-3 flex-shrink-0 mt-4">
+                            <button onClick={() => handleOpenReportModal(activity)} className="text-gray-400 hover:text-green-500"><FileText size={18} /></button>
+                            <button onClick={() => openEditModal(activity)} className="text-gray-400 hover:text-blue-500"><Pencil size={18} /></button>
+                            <button onClick={() => openDeleteModal(activity)} className="text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
+                        </div>
                     </div>
+                    
                 ))
             ) : (<div className="col-span-full text-center py-10"><p className="text-gray-500">{searchQuery ? 'No match found.' : 'No activities yet.'}</p></div>)}
           </div>
