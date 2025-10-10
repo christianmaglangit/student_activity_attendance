@@ -63,13 +63,7 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant
     danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
   };
   return (
-    <button 
-        className={`${base} ${styles[variant]} ${className}`} 
-        {...props}
-        suppressHydrationWarning
-    >
-        {children}
-    </button>
+    <button className={`${base} ${styles[variant]} ${className}`} {...props} suppressHydrationWarning>{children}</button>
   );
 };
 
@@ -91,9 +85,7 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.Re
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={24} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto"> 
-                    <div className="p-6">
-                        {children}
-                    </div>
+                    <div className="p-6">{children}</div>
                 </div>
             </div>
         </div>
@@ -107,7 +99,6 @@ const SidebarContent = () => {
       router.push('/');
       router.refresh();
     };
-
     return (
         <div className="flex h-full max-h-screen flex-col gap-2">
             <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6"><Link href="/dashboard" className="flex items-center gap-2 font-semibold"><UserCheck className="h-6 w-6 text-green-600" /><span>Student Activity</span></Link></div>
@@ -137,27 +128,9 @@ export default function ActivityPage() {
 
   const fetchActivities = async () => { setLoading(true); const { data, error } = await supabase.from('activities').select(`*, activity_schedules (*)`).order('start_date', { ascending: false }); if (error) { console.error('Error fetching:', error); setMessage(`Error: ${error.message}`); } else { setActivities(data || []); } setLoading(false); };
   useEffect(() => { fetchActivities(); }, []);
-  
-  useEffect(() => {
-    if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        if (start > end) { setSchedules([]); return; }
-        const newSchedules: ActivitySchedule[] = [];
-        // eslint-disable-next-line prefer-const
-        let currentDate = new Date(start); 
-        while (currentDate <= end) {
-            const dateStr = currentDate.toISOString().split('T')[0];
-            const existingSchedule = selectedActivity?.activity_schedules.find(s => s.date === dateStr);
-            newSchedules.push({ date: dateStr, am_in: existingSchedule?.am_in || '08:00', am_out: existingSchedule?.am_out || '12:00', pm_in: existingSchedule?.pm_in || '13:00', pm_out: existingSchedule?.pm_out || '17:00' });
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-        setSchedules(newSchedules);
-    } else {
-        setSchedules([]);
-    }
-  }, [startDate, endDate, selectedActivity]);
-
+  useEffect(() => { if (startDate && endDate) { const start = new Date(startDate); const end = new Date(endDate); if (start > end) { setSchedules([]); return; } const newSchedules: ActivitySchedule[] = [];
+  // eslint-disable-next-line prefer-const
+  let currentDate = new Date(start); while (currentDate <= end) { const dateStr = currentDate.toISOString().split('T')[0]; const existingSchedule = selectedActivity?.activity_schedules.find(s => s.date === dateStr); newSchedules.push({ date: dateStr, am_in: existingSchedule?.am_in || '08:00', am_out: existingSchedule?.am_out || '12:00', pm_in: existingSchedule?.pm_in || '13:00', pm_out: existingSchedule?.pm_out || '17:00' }); currentDate.setDate(currentDate.getDate() + 1); } setSchedules(newSchedules); } else { setSchedules([]); } }, [startDate, endDate, selectedActivity]);
   const handleScheduleChange = (index: number, field: keyof Omit<ActivitySchedule, 'id' | 'activity_id' | 'date'>, value: string) => { const updatedSchedules = [...schedules]; updatedSchedules[index] = { ...updatedSchedules[index], [field]: value }; setSchedules(updatedSchedules); };
   const clearForm = () => { setActivityName(''); setStartDate(''); setEndDate(''); setSchedules([]); setMessage(''); setSelectedActivity(null); };
   const handleAddActivity = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); const { data: d, error: err } = await supabase.from('activities').insert({ name: activityName, start_date: startDate, end_date: endDate }).select().single(); if (err) { setMessage(`Error: ${err.message}`); setLoading(false); return; } const s = schedules.map(sc => ({ ...sc, activity_id: d.id })); const { error: sErr } = await supabase.from('activity_schedules').insert(s); if (sErr) { setMessage(`Error: ${sErr.message}`); await supabase.from('activities').delete().eq('id', d.id); } else { setAddModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
@@ -166,28 +139,84 @@ export default function ActivityPage() {
   const openEditModal = (activity: ActivityType) => { setSelectedActivity(activity); setActivityName(activity.name); setStartDate(activity.start_date); setEndDate(activity.end_date); setSchedules(activity.activity_schedules); setEditModalOpen(true); };
   const openDeleteModal = (activity: ActivityType) => { setSelectedActivity(activity); setDeleteModalOpen(true); };
   
+  // --- GI-AYO: Mas reliable nga paagi sa pagkuha ug report data ---
   const handleOpenReportModal = async (activity: ActivityType) => {
-    setSelectedActivity(activity); setReportModalOpen(true); setReportLoading(true);
-    const { data, error } = await supabase.from('attendance_report').select('scanned_at, status, students(student_id, full_name, course, year_level)').eq('activity_id', activity.id);
-    if (error) { console.error("Error fetching report:", error); setReportData([]);
-    } else {
-        type StudentInfo = { student_id: string; full_name: string; course: string; year_level: string; };
-        const studentMap = new Map<string, ReportRow>();
-        data.forEach(record => {
-            if (!record.students || !Array.isArray(record.students) || record.students.length === 0) { return; }
-            const studentInfo = record.students[0] as StudentInfo;
-            if (!studentMap.has(studentInfo.student_id)) { studentMap.set(studentInfo.student_id, { student_id: studentInfo.student_id, full_name: studentInfo.full_name, course: studentInfo.course, year_level: studentInfo.year_level, 'Time In (AM)': null, 'Time Out (AM)': null, 'Time In (PM)': null, 'Time Out (PM)': null, scans_completed: 0, }); }
-            const studentEntry = studentMap.get(studentInfo.student_id)!;
-            const time = new Date(record.scanned_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-            if (record.status === 'Time In (AM)') studentEntry['Time In (AM)'] = time; if (record.status === 'Time Out (AM)') studentEntry['Time Out (AM)'] = time; if (record.status === 'Time In (PM)') studentEntry['Time In (PM)'] = time; if (record.status === 'Time Out (PM)') studentEntry['Time Out (PM)'] = time;
-        });
-        for (const studentEntry of studentMap.values()) { let count = 0; if (studentEntry['Time In (AM)']) count++; if (studentEntry['Time Out (AM)']) count++; if (studentEntry['Time In (PM)']) count++; if (studentEntry['Time Out (PM)']) count++; studentEntry.scans_completed = count; }
-        const finalData = Array.from(studentMap.values());
-        finalData.sort((a, b) => a.full_name.localeCompare(b.full_name));
-        setReportData(finalData);
+    setSelectedActivity(activity);
+    setReportModalOpen(true);
+    setReportLoading(true);
+
+    // Step 1: Kuhaon ang tanang attendance records para sa specific activity
+    const { data: attendanceData, error: attendanceError } = await supabase
+      .from('attendance_report')
+      .select('student_id, scanned_at, status')
+      .eq('activity_id', activity.id);
+
+    if (attendanceError || !attendanceData || attendanceData.length === 0) {
+      console.error("Walay attendance data or naay error:", attendanceError);
+      setReportData([]);
+      setReportLoading(false);
+      return;
     }
+
+    // Step 2: Kuhaon ang unique student IDs gikan sa attendance records
+    const studentIds = [...new Set(attendanceData.map((att) => att.student_id))];
+
+    // Step 3: Kuhaon ang detalye anang mga studenta sa isa lang ka query
+    const { data: studentsData, error: studentsError } = await supabase
+      .from('students')
+      .select('student_id, full_name, course, year_level')
+      .in('student_id', studentIds);
+
+    if (studentsError) {
+      console.error("Error sa pagkuha sa student details:", studentsError);
+      setReportData([]);
+      setReportLoading(false);
+      return;
+    }
+
+    // Step 4: I-combine ang duha ka data sa sulod sa code
+    const reportMap = new Map<string, ReportRow>();
+
+    // I-initialize ang report map sa tanang student nga naay attendance
+    studentsData.forEach(student => {
+        reportMap.set(student.student_id, {
+            student_id: student.student_id,
+            full_name: student.full_name,
+            course: student.course,
+            year_level: student.year_level,
+            'Time In (AM)': null, 'Time Out (AM)': null, 'Time In (PM)': null, 'Time Out (PM)': null,
+            scans_completed: 0,
+        });
+    });
+    
+    // Butangan ug value ang time-in/out base sa attendance records
+    attendanceData.forEach(record => {
+      const studentEntry = reportMap.get(record.student_id);
+      if (studentEntry) {
+        const time = new Date(record.scanned_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        if (record.status === 'Time In (AM)') studentEntry['Time In (AM)'] = time;
+        if (record.status === 'Time Out (AM)') studentEntry['Time Out (AM)'] = time;
+        if (record.status === 'Time In (PM)') studentEntry['Time In (PM)'] = time;
+        if (record.status === 'Time Out (PM)') studentEntry['Time Out (PM)'] = time;
+      }
+    });
+
+    // Final processing (pag-ihap sa scans ug pag-sort)
+    const finalData = Array.from(reportMap.values());
+    finalData.forEach(entry => {
+      let count = 0;
+      if (entry['Time In (AM)']) count++;
+      if (entry['Time Out (AM)']) count++;
+      if (entry['Time In (PM)']) count++;
+      if (entry['Time Out (PM)']) count++;
+      entry.scans_completed = count;
+    });
+    finalData.sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+    setReportData(finalData);
     setReportLoading(false);
   };
+
 
   const handleExportPDF = () => { if (!selectedActivity || reportData.length === 0) return; const doc = new jsPDF({ orientation: 'landscape' }); const pageWidth = doc.internal.pageSize.getWidth(); doc.setFontSize(14); doc.setTextColor(0); doc.text(`College of Computer Studies`, pageWidth / 2, 20, { align: "center" }); doc.text(`Computer Studies Student Organization`, pageWidth / 2, 28, { align: "center" }); doc.text(`${selectedActivity.name} Attendance`, pageWidth / 2, 36, { align: "center" }); doc.setFontSize(11); doc.setTextColor(100); const formattedStartDate = formatDate(selectedActivity.start_date); const formattedEndDate = formatDate(selectedActivity.end_date); const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`; doc.text(dateString, pageWidth / 2, 44, { align: "center" }); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 50, { align: "center" }); const tableHeaders = [["ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]]; const tableBody = reportData.map(student => [ student.student_id, student.full_name, `${student.course} - ${student.year_level}`, student['Time In (AM)'] || '--', student['Time Out (AM)'] || '--', student['Time In (PM)'] || '--', student['Time Out (PM)'] || '--', `${student.scans_completed} / 4` ]); autoTable(doc, { head: tableHeaders, body: tableBody, startY: 58, theme: 'striped', headStyles: { fillColor: [22, 160, 133] }, }); const safeFileName = selectedActivity.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(); doc.save(`attendance_report_${safeFileName}.pdf`); };
   const closeModal = () => { setAddModalOpen(false); setEditModalOpen(false); setDeleteModalOpen(false); setReportModalOpen(false); clearForm(); }
@@ -207,40 +236,40 @@ export default function ActivityPage() {
         </header>
 
         <main className={`flex-1 overflow-y-auto p-4 lg:p-6`}>
-            <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-                <div className="relative flex-grow max-w-xs">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input type="text" placeholder="Search activities..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border-2 bg-white border-gray-200 rounded-lg focus:outline-none focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" suppressHydrationWarning />
-                </div>
-                <Button onClick={() => setAddModalOpen(true)} className="w-auto flex items-center gap-2"><CalendarPlus size={18} /> Add Activity</Button>
-            </div>
+          <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+              <div className="relative flex-grow max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input type="text" placeholder="Search activities..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border-2 bg-white border-gray-200 rounded-lg focus:outline-none focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" suppressHydrationWarning />
+              </div>
+              <Button onClick={() => setAddModalOpen(true)} className="w-auto flex items-center gap-2"><CalendarPlus size={18} /> Add Activity</Button>
+          </div>
           
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {loading ? <p>Loading...</p> : filteredActivities.length > 0 ? (
-                    filteredActivities.map(activity => (
-                        <div key={activity.id} className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-900 flex flex-col">
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="text-xl font-bold text-green-600 pr-2">{activity.name}</h3>
-                                <div className="flex items-center gap-3 flex-shrink-0">
-                                    <button onClick={() => handleOpenReportModal(activity)} className="text-gray-400 hover:text-green-500"><FileText size={18} /></button>
-                                    <button onClick={() => openEditModal(activity)} className="text-gray-400 hover:text-blue-500"><Pencil size={18} /></button>
-                                    <button onClick={() => openDeleteModal(activity)} className="text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4"><CalendarDays size={16} /><span>{formatDate(activity.start_date)}</span>{activity.start_date !== activity.end_date && <><span>-</span><span>{formatDate(activity.end_date)}</span></>}</div>
-                            <div className="flex-grow space-y-3 max-h-60 overflow-y-auto pr-2">
-                                {activity.activity_schedules.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 3).map(schedule => (
-                                    <div key={schedule.id} className="text-xs p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
-                                        <p className='font-semibold mb-2 text-center'>{formatDate(schedule.date)}</p>
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1"><div><span className="font-medium">AM In:</span> {schedule.am_in}</div><div><span className="font-medium">AM Out:</span> {schedule.am_out}</div><div><span className="font-medium">PM In:</span> {schedule.pm_in}</div><div><span className="font-medium">PM Out:</span> {schedule.pm_out}</div></div>
-                                    </div>
-                                ))}
-                                {activity.activity_schedules.length > 3 && <p className="text-center text-xs text-gray-500 mt-2">...and {activity.activity_schedules.length - 3} more days</p>}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {loading ? <p>Loading...</p> : filteredActivities.length > 0 ? (
+                filteredActivities.map(activity => (
+                    <div key={activity.id} className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-900 flex flex-col">
+                        <div className="flex justify-between items-start mb-2">
+                            <h3 className="text-xl font-bold text-green-600 pr-2">{activity.name}</h3>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                                <button onClick={() => handleOpenReportModal(activity)} className="text-gray-400 hover:text-green-500"><FileText size={18} /></button>
+                                <button onClick={() => openEditModal(activity)} className="text-gray-400 hover:text-blue-500"><Pencil size={18} /></button>
+                                <button onClick={() => openDeleteModal(activity)} className="text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
                             </div>
                         </div>
-                    ))
-                ) : (<div className="col-span-full text-center py-10"><p className="text-gray-500">{searchQuery ? 'No match found.' : 'No activities yet.'}</p></div>)}
-            </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4"><CalendarDays size={16} /><span>{formatDate(activity.start_date)}</span>{activity.start_date !== activity.end_date && <><span>-</span><span>{formatDate(activity.end_date)}</span></>}</div>
+                        <div className="flex-grow space-y-3 max-h-60 overflow-y-auto pr-2">
+                            {activity.activity_schedules.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 3).map(schedule => (
+                                <div key={schedule.id} className="text-xs p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                                    <p className='font-semibold mb-2 text-center'>{formatDate(schedule.date)}</p>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1"><div><span className="font-medium">AM In:</span> {schedule.am_in}</div><div><span className="font-medium">AM Out:</span> {schedule.am_out}</div><div><span className="font-medium">PM In:</span> {schedule.pm_in}</div><div><span className="font-medium">PM Out:</span> {schedule.pm_out}</div></div>
+                                </div>
+                            ))}
+                            {activity.activity_schedules.length > 3 && <p className="text-center text-xs text-gray-500 mt-2">...and {activity.activity_schedules.length - 3} more days</p>}
+                        </div>
+                    </div>
+                ))
+            ) : (<div className="col-span-full text-center py-10"><p className="text-gray-500">{searchQuery ? 'No match found.' : 'No activities yet.'}</p></div>)}
+          </div>
         </main>
       </div>
 
