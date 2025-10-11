@@ -335,7 +335,7 @@ export default function ScanAttendancePage() {
                                 )}
                             </div>
                             
-                            <div className="w-full aspect-square lg:h-[500px] dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
+                            <div className="w-full lg:h-[500px] dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
                                 <div id="reader"></div>
                                 {!isCameraOn && (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4">
