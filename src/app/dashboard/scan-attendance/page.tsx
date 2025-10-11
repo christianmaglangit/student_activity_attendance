@@ -395,9 +395,9 @@ export default function ScanAttendancePage() {
                                  )}
                              </div>
                             
-                            <div className="w-full aspect-square lg:h-[500px] bg-slate-100 dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
+                            <div className="w-full aspect-square lg:h-[500px] dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
                                 {/* This is where the scanner view will be injected */}
-                                <div id="reader" className="w-full h-full"></div>
+                                <div id="reader" className="justify-center "></div>
                                 
                                 {!isCameraOn && (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4">
