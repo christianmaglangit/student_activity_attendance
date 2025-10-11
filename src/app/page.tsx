@@ -116,12 +116,12 @@ export default function HomePage() {
     <div className="bg-gray-200 dark:bg-gray-900 min-h-screen"> 
       <div className={`flex flex-col min-h-screen transition-all duration-300 ${isLoginOpen || isSignUpOpen ? 'blur-sm' : ''}`}> 
         <Header onLoginClick={openLogin} onSignUpClick={openSignUp} isMenuOpen={isMenuOpen} toggleMenu={toggleMenu} /> 
-        <main className="flex-grow container mx-auto px-4 text-center flex flex-col items-center justify-center bg-gray-200"> 
+        <main className="flex-grow container mx-auto px-4 text-center flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-400"> 
           <div className="max-w-3xl py-16"> 
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-gray-900 dark:text-black"> 
               The Smart Way to Track{' '} <span className="text-green-600 dark:text-green-400"> Student Activity </span> 
             </h2> 
-            <p className="mt-6 text-base md:text-lg text-gray-600 dark:text-gray-600"> 
+            <p className="mt-6 text-base md:text-lg text-gray-600 dark:text-gray-800"> 
               Simplify attendance tracking, reduce administrative tasks, and gain valuable insights with our seamless, modern platform. 
             </p> 
             <div className="mt-10"> 
