@@ -49,7 +49,7 @@ const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.Ele
     const pathname = usePathname();
     const isActive = pathname.startsWith(href);
     return (
-        <Link href={href} className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${ isActive ? 'bg-green-100 text-green-600 dark:bg-slate-800 dark:text-slate-50 font-semibold' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50' }`}>
+        <Link href={href} className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${ isActive ? 'bg-green-100 text-green-700 dark:bg-slate-800 dark:text-slate-50 font-semibold' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50' }`}>
             <Icon className="h-5 w-5" />
             {children}
         </Link>
@@ -105,7 +105,7 @@ const SidebarContent = () => {
             <div className="flex h-16 items-center border-b px-4 lg:px-6 dark:border-slate-800">
                 <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
                     <UserCheck className="h-6 w-6 text-green-600" />
-                    <span className="text-slate-800 dark:text-white">Student Activity Attendance</span>
+                    <span className="text-slate-800 dark:text-white">Student Activity</span>
                 </Link>
             </div>
             <div className="flex-1 py-2">
@@ -144,7 +144,7 @@ const ActivityCardSkeleton = () => (
 
 
 export default function ActivityPage() {
-    // State and hooks (No changes)
+    // State and hooks
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [activities, setActivities] = useState<ActivityType[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -162,24 +162,38 @@ export default function ActivityPage() {
     const [reportData, setReportData] = useState<ReportRow[]>([]);
     const [message, setMessage] = useState('');
 
-    // --- MODIFIED: Changed order to 'created_at' ---
-    const fetchActivities = async () => { 
-        setLoading(true); 
-        const { data, error } = await supabase.from('activities')
-            .select(`*, activity_schedules (*)`)
-            .order('created_at', { ascending: false }); // <-- THIS LINE WAS CHANGED
-            
-        if (error) { 
-            console.error('Error fetching:', error); 
-            setMessage(`Error: ${error.message}`); 
-        } else { 
-            setActivities(data || []); 
-        } 
-        setTimeout(() => setLoading(false), 500); 
-    };
-
+    // Functions
+    const fetchActivities = async () => { setLoading(true); const { data, error } = await supabase.from('activities').select(`*, activity_schedules (*)`).order('created_at', { ascending: false }); if (error) { console.error('Error fetching:', error); setMessage(`Error: ${error.message}`); } else { setActivities(data || []); } setTimeout(() => setLoading(false), 500); };
     useEffect(() => { fetchActivities(); }, []);
-    useEffect(() => { if (startDate && endDate) { const start = new Date(startDate); const end = new Date(endDate); if (start > end) { setSchedules([]); return; } const newSchedules: ActivitySchedule[] = []; let currentDate = new Date(start); while (currentDate <= end) { const dateStr = currentDate.toISOString().split('T')[0]; const existingSchedule = selectedActivity?.activity_schedules.find(s => s.date === dateStr); newSchedules.push({ date: dateStr, am_in: existingSchedule?.am_in || '08:00', am_out: existingSchedule?.am_out || '12:00', pm_in: existingSchedule?.pm_in || '13:00', pm_out: existingSchedule?.pm_out || '17:00' }); currentDate.setDate(currentDate.getDate() + 1); } setSchedules(newSchedules); } else { setSchedules([]); } }, [startDate, endDate, selectedActivity]);
+
+    // --- FIXED: 'prefer-const' error was here ---
+    useEffect(() => { 
+        if (startDate && endDate) { 
+            const start = new Date(startDate); 
+            const end = new Date(endDate); 
+            if (start > end) { 
+                setSchedules([]); 
+                return; 
+            } 
+            const newSchedules: ActivitySchedule[] = [];
+            // Changed `let` and `while` to a `for` loop to fix the linter error
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                const dateStr = new Date(d).toISOString().split('T')[0];
+                const existingSchedule = selectedActivity?.activity_schedules.find(s => s.date === dateStr); 
+                newSchedules.push({ 
+                    date: dateStr, 
+                    am_in: existingSchedule?.am_in || '08:00', 
+                    am_out: existingSchedule?.am_out || '12:00', 
+                    pm_in: existingSchedule?.pm_in || '13:00', 
+                    pm_out: existingSchedule?.pm_out || '17:00' 
+                }); 
+            }
+            setSchedules(newSchedules); 
+        } else { 
+            setSchedules([]); 
+        } 
+    }, [startDate, endDate, selectedActivity]);
+
     const handleScheduleChange = (index: number, field: keyof Omit<ActivitySchedule, 'id' | 'activity_id' | 'date'>, value: string) => { const updatedSchedules = [...schedules]; updatedSchedules[index] = { ...updatedSchedules[index], [field]: value }; setSchedules(updatedSchedules); };
     const clearForm = () => { setActivityName(''); setStartDate(''); setEndDate(''); setSchedules([]); setMessage(''); setSelectedActivity(null); };
     const handleAddActivity = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); const { data: { user } } = await supabase.auth.getUser(); if (!user) { setMessage("Error: You must be logged in to create an activity."); setLoading(false); return; } const { data: newActivity, error: activityError } = await supabase.from('activities').insert({ name: activityName, start_date: startDate, end_date: endDate, user_id: user.id }).select().single(); if (activityError) { setMessage(`Error: ${activityError.message}`); setLoading(false); return; } const schedulesWithActivityId = schedules.map(sc => ({ ...sc, activity_id: newActivity.id })); const { error: scheduleError } = await supabase.from('activity_schedules').insert(schedulesWithActivityId); if (scheduleError) { setMessage(`Error saving schedules: ${scheduleError.message}`); await supabase.from('activities').delete().eq('id', newActivity.id); } else { setAddModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
@@ -188,7 +202,7 @@ export default function ActivityPage() {
     const openEditModal = (activity: ActivityType) => { setSelectedActivity(activity); setActivityName(activity.name); setStartDate(activity.start_date); setEndDate(activity.end_date); setSchedules(activity.activity_schedules); setEditModalOpen(true); };
     const openDeleteModal = (activity: ActivityType) => { setSelectedActivity(activity); setDeleteModalOpen(true); };
     const handleOpenReportModal = async (activity: ActivityType) => { setSelectedActivity(activity); setReportModalOpen(true); setReportLoading(true); const { data: attendanceData, error: attendanceError } = await supabase.from('attendance_report').select('student_id, scanned_at, status').eq('activity_id', activity.id); if (attendanceError || !attendanceData || attendanceData.length === 0) { console.error("Walay attendance data or naay error:", attendanceError); setReportData([]); setReportLoading(false); return; } const studentIds = [...new Set(attendanceData.map((att) => att.student_id))]; const { data: studentsData, error: studentsError } = await supabase.from('students').select('student_id, full_name, course, year_level').in('student_id', studentIds); if (studentsError) { console.error("Error sa pagkuha sa student details:", studentsError); setReportData([]); setReportLoading(false); return; } const reportMap = new Map<string, ReportRow>(); studentsData.forEach(student => { reportMap.set(student.student_id, { student_id: student.student_id, full_name: student.full_name, course: student.course, year_level: student.year_level, 'Time In (AM)': null, 'Time Out (AM)': null, 'Time In (PM)': null, 'Time Out (PM)': null, scans_completed: 0, }); }); attendanceData.forEach(record => { const studentEntry = reportMap.get(record.student_id); if (studentEntry) { const time = new Date(record.scanned_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }); if (record.status === 'Time In (AM)') studentEntry['Time In (AM)'] = time; if (record.status === 'Time Out (AM)') studentEntry['Time Out (AM)'] = time; if (record.status === 'Time In (PM)') studentEntry['Time In (PM)'] = time; if (record.status === 'Time Out (PM)') studentEntry['Time Out (PM)'] = time; } }); const finalData = Array.from(reportMap.values()); finalData.forEach(entry => { let count = 0; if (entry['Time In (AM)']) count++; if (entry['Time Out (AM)']) count++; if (entry['Time In (PM)']) count++; if (entry['Time Out (PM)']) count++; entry.scans_completed = count; }); finalData.sort((a, b) => a.full_name.localeCompare(b.full_name)); setReportData(finalData); setReportLoading(false); };
-    const handleExportPDF = () => { if (!selectedActivity || reportData.length === 0) return; const doc = new jsPDF({ orientation: 'landscape' }); const pageWidth = doc.internal.pageSize.getWidth(); doc.setFontSize(14); doc.setTextColor(0); doc.text(`College of Computer Studies`, pageWidth / 2, 20, { align: "center" }); doc.text(`Computer Studies Student Organization`, pageWidth / 2, 28, { align: "center" }); doc.text(`${selectedActivity.name} Attendance`, pageWidth / 2, 36, { align: "center" }); doc.setFontSize(11); doc.setTextColor(100); const formattedStartDate = formatDate(selectedActivity.start_date); const formattedEndDate = formatDate(selectedActivity.end_date); const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`; doc.text(dateString, pageWidth / 2, 44, { align: "center" }); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 50, { align: "center" }); const tableHeaders = [["ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]]; const tableBody = reportData.map(student => [ student.student_id, student.full_name, `${student.course} - ${student.year_level}`, student['Time In (AM)'] || '--', student['Time Out (AM)'] || '--', student['Time In (PM)'] || '--', student['Time Out (PM)'] || '--', `${student.scans_completed} / 4` ]); autoTable(doc, { head: tableHeaders, body: tableBody, startY: 58, theme: 'striped', headStyles: { fillColor: [21, 128, 61] }, }); // Changed fillColor to green
+    const handleExportPDF = () => { if (!selectedActivity || reportData.length === 0) return; const doc = new jsPDF({ orientation: 'landscape' }); const pageWidth = doc.internal.pageSize.getWidth(); doc.setFontSize(14); doc.setTextColor(0); doc.text(`College of Computer Studies`, pageWidth / 2, 20, { align: "center" }); doc.text(`Computer Studies Student Organization`, pageWidth / 2, 28, { align: "center" }); doc.text(`${selectedActivity.name} Attendance`, pageWidth / 2, 36, { align: "center" }); doc.setFontSize(11); doc.setTextColor(100); const formattedStartDate = formatDate(selectedActivity.start_date); const formattedEndDate = formatDate(selectedActivity.end_date); const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`; doc.text(dateString, pageWidth / 2, 44, { align: "center" }); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 50, { align: "center" }); const tableHeaders = [["ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]]; const tableBody = reportData.map(student => [ student.student_id, student.full_name, `${student.course} - ${student.year_level}`, student['Time In (AM)'] || '--', student['Time Out (AM)'] || '--', student['Time In (PM)'] || '--', student['Time Out (PM)'] || '--', `${student.scans_completed} / 4` ]); autoTable(doc, { head: tableHeaders, body: tableBody, startY: 58, theme: 'striped', headStyles: { fillColor: [21, 128, 61] }, }); 
     const safeFileName = selectedActivity.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(); doc.save(`attendance_report_${safeFileName}.pdf`); };
     const closeModal = () => { setAddModalOpen(false); setEditModalOpen(false); setDeleteModalOpen(false); setReportModalOpen(false); clearForm(); }
     const filteredActivities = useMemo(() => { if (!searchQuery.trim()) return activities; return activities.filter(act => act.name.toLowerCase().includes(searchQuery.toLowerCase())); }, [activities, searchQuery]);
