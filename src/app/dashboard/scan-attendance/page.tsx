@@ -289,14 +289,6 @@ export default function ScanAttendancePage() {
 
     return (
         <div className={`grid h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
-            <style>
-                {`
-                  #reader video {
-                    transform: scaleX(-1);
-                    -webkit-transform: scaleX(-1);
-                  }
-                `}
-            </style>
             <div className="hidden border-r bg-white md:block dark:bg-slate-900 dark:border-slate-800">
                 <SidebarContent onLogout={handleLogout} />
             </div>
@@ -342,7 +334,7 @@ export default function ScanAttendancePage() {
                             </div>
                             
                             <div className="w-full aspect-square lg:h-[500px] bg-slate-100 dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
-                                <div id="reader" className="w-full h-full"></div>
+                                <div id="reader"></div>
                                 {!isCameraOn && (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4">
                                         <CameraOff size={48} className="mb-2" />
