@@ -281,6 +281,15 @@ export default function ScanAttendancePage() {
 
     return (
         <div className={`grid h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
+            {/* --- ADDED: Style tag to mirror the camera view --- */}
+            <style>
+                {`
+                  #reader video {
+                    transform: scaleX(-1);
+                    -webkit-transform: scaleX(-1); /* For Safari support */
+                  }
+                `}
+            </style>
             
             <div className="hidden border-r bg-white md:block dark:bg-slate-900 dark:border-slate-800">
                 <SidebarContent onLogout={handleLogout} />
