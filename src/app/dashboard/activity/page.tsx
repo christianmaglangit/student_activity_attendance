@@ -303,24 +303,36 @@ const fetchUserProfile = async () => {
 
 
 const handleExportPDF = () => {
-    if (!selectedActivity || reportData.length === 0 || !userProfile) return; 
+    if (!selectedActivity || reportData.length === 0 || !userProfile) return;
 
     const doc = new jsPDF({ orientation: 'landscape' });
     const pageWidth = doc.internal.pageSize.getWidth();
-    doc.setFontSize(14);
+
+    // --- Document Header ---
+    doc.setFontSize(16);
     doc.setTextColor(0);
     doc.text(userProfile.name, pageWidth / 2, 20, { align: "center" });
+    doc.setFontSize(14);
+    doc.setTextColor(0);
     doc.text(userProfile.collegedep || '', pageWidth / 2, 28, { align: "center" });
-    doc.text(`${selectedActivity.name} ATTENDANCE`, pageWidth / 2, 36, { align: "center" });
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    doc.text(`${selectedActivity.name}ATTENDANCE `, pageWidth / 2, 36, { align: "center" });
+
+    // --- Document Sub-header ---
     doc.setFontSize(11);
     doc.setTextColor(100);
     const formattedStartDate = formatDate(selectedActivity.start_date);
     const formattedEndDate = formatDate(selectedActivity.end_date);
     const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`;
     doc.text(dateString, pageWidth / 2, 44, { align: "center" });
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 50, { align: "center" });
-    const tableHeaders = [["ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]];
-    const tableBody = reportData.map(student => [
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 50, { align: "center" });
+
+    // --- Table Data Preparation ---
+    const tableHeaders = [["#", "ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]];
+    
+    const tableBody = reportData.map((student, index) => [
+        index + 1, // Add numbering here
         student.student_id,
         student.full_name,
         `${student.course} - ${student.year_level}`,
@@ -330,27 +342,38 @@ const handleExportPDF = () => {
         student['Time Out (PM)'] || '--',
         `${student.scans_completed} / 4`
     ]);
+
+    // --- Generate Table ---
     autoTable(doc, {
         head: tableHeaders,
         body: tableBody,
         startY: 58,
         theme: 'striped',
-        headStyles: { fillColor: [22, 160, 133] },
+        headStyles: { fillColor: [22, 160, 133] }, // A nice green color
     });
+
+    // --- Save Document ---
     const safeFileName = selectedActivity.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     doc.save(`attendance_report_${safeFileName}.pdf`);
-  };
+};
 
   const closeModal = () => { setAddModalOpen(false); setEditModalOpen(false); setDeleteModalOpen(false); setReportModalOpen(false); clearForm(); }
   const filteredActivities = useMemo(() => { if (!searchQuery.trim()) return activities; return activities.filter(act => act.name.toLowerCase().includes(searchQuery.toLowerCase())); }, [activities, searchQuery]);
   const filteredReportData = useMemo(() => {
-    if (!reportSearchQuery.trim()) {
+    const query = reportSearchQuery.trim().toLowerCase();
+    
+    if (!query) {
       return reportData;
     }
-    return reportData.filter(student =>
-      student.student_id.toLowerCase().includes(reportSearchQuery.toLowerCase())
-    );
-  }, [reportData, reportSearchQuery]);
+
+    return reportData.filter(student => {
+        const matchesId = student.student_id.toLowerCase().includes(query);
+        const matchesYearLevel = student.year_level.toString().toLowerCase().includes(query);
+        
+        // Return true if the query matches either the ID or the year level
+        return matchesId || matchesYearLevel;
+    });
+}, [reportData, reportSearchQuery]);
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -458,7 +481,7 @@ const handleExportPDF = () => {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Search by ID Number..."
+                        placeholder="Search by ID or Year Level..."
                         value={reportSearchQuery}
                         onChange={(e) => setReportSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border-2 bg-white border-gray-200 rounded-lg focus:outline-none focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -475,26 +498,71 @@ const handleExportPDF = () => {
             {/* --- MODIFIED THIS SECTION --- */}
             {filteredReportData.length > 0 ? (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        {/* thead remains the same */}
+                    <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                           {/* ... table headers ... */}
+                            <tr>
+                                <th scope="col" className="px-6 py-3">
+                                    #
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Student ID
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Full Name
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Course & Year
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Time In (AM)
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Time Out (AM)
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Time In (PM)
+                                </th>
+                                <th scope="col" className="px-6 py-3">
+                                    Time Out (PM)
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-center">
+                                    Status
+                                </th>
+                            </tr>
                         </thead>
                         <tbody>
-                            {/* Use the filtered data here */}
-                            {filteredReportData.map(student => {
+                            {filteredReportData.map((student, index) => {
                                 const scans = student.scans_completed;
                                 const scanStatusColor = scans === 4 ? 'text-green-500' : scans > 0 ? 'text-yellow-500' : 'text-red-500';
                                 return (
-                                    <tr key={student.student_id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                                        <td className="px-6 py-4 font-mono">{student.student_id}</td>
-                                        <td className="px-6 py-4 font-medium">{student.full_name}</td>
-                                        <td className="px-6 py-4">{student.course} - {student.year_level}</td>
-                                        <td className="px-6 py-4">{student['Time In (AM)'] || '--'}</td>
-                                        <td className="px-6 py-4">{student['Time Out (AM)'] || '--'}</td>
-                                        <td className="px-6 py-4">{student['Time In (PM)'] || '--'}</td>
-                                        <td className="px-6 py-4">{student['Time Out (PM)'] || '--'}</td>
-                                        <td className={`px-6 py-4 font-bold text-center ${scanStatusColor}`}>{scans} / 4</td>
+                                    <tr key={student.student_id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+                                            {index + 1}
+                                        </td>
+                                        <td className="px-6 py-4 font-mono text-gray-900 dark:text-white">
+                                            {student.student_id}
+                                        </td>
+                                        <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                                            {student.full_name}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {student.course} - {student.year_level}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {student['Time In (AM)'] || '--'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {student['Time Out (AM)'] || '--'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {student['Time In (PM)'] || '--'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {student['Time Out (PM)'] || '--'}
+                                        </td>
+                                        <td className={`px-6 py-4 font-bold text-center ${scanStatusColor}`}>
+                                            {scans} / 4
+                                        </td>
                                     </tr>
                                 )
                             })}
@@ -502,16 +570,11 @@ const handleExportPDF = () => {
                     </table>
                 </div>
             ) : (
-                <p className="text-center text-gray-500">
-                    {reportData.length === 0 ? "No attendance records found." : "No matching ID Number found."}
-                </p>
-            )}
-                <div className="mt-6 pt-4 border-t dark:border-gray-700 flex justify-end">
-                    <Button onClick={handleExportPDF} disabled={reportData.length === 0}>
-                        <Download size={18} className="inline mr-2" />
-                        Export to PDF
-                    </Button>
+                <div className="text-center py-10">
+                    <p className="text-gray-500 dark:text-gray-400">No report data available for the selected activity.</p>
                 </div>
+            )}
+                
             </>
         )}
       </Modal>
