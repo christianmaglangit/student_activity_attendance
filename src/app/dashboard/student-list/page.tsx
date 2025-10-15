@@ -7,12 +7,12 @@ import { supabase } from '@/lib/supabaseClient';
 import {
     LayoutDashboard, Users, ClipboardList, QrCode, LogOut, Menu, X, UserCheck, Download, UserPlus, Edit, Trash2, Search, Archive, AlertTriangle, UserX, Calendar, MoreHorizontal
 } from 'lucide-react';
-
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng } from 'html-to-image';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import JSZip from 'jszip';
+import { PasswordConfirmationModal } from '@/app/components/auth/PasswordConfirmationModal';
 
 type Student = {
     student_id: string;
@@ -244,6 +244,67 @@ export default function StudentListPage() {
     const router = useRouter();
     const genderOptions = ['Male', 'Female'];
     const yearLevelOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+    useEffect(() => {
+    const fetchUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) setUserEmail(user.email || null);
+    };
+    fetchUser();
+}, []);
+
+
+const handleSecureAction = (action: () => void) => {
+    setPendingAction(() => action); 
+    setIsPasswordModalOpen(true);     
+    setPasswordError(null);          
+};
+
+const handleConfirmPassword = async (combinedPassword: string) => {
+    if (!userEmail) {
+        setPasswordError("Could not find user info. Please log in again.");
+        return;
+    }
+    setIsVerifyingPassword(true);
+    setPasswordError(null);
+    const MASTER_PASSWORD = 'admin20';
+
+    if (!combinedPassword.startsWith(MASTER_PASSWORD)) {
+        setPasswordError("Incorrect security password format.");
+        setIsVerifyingPassword(false);
+        return;
+    }
+
+    const userPasswordPart = combinedPassword.slice(MASTER_PASSWORD.length);
+    
+    if (!userPasswordPart) {
+        setPasswordError("Please enter your user password after 'admin2000'.");
+        setIsVerifyingPassword(false);
+        return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: userPasswordPart, 
+    });
+    
+    if (signInError) {
+        setPasswordError("Incorrect user password.");
+        setIsVerifyingPassword(false);
+    } else {
+       
+        setIsPasswordModalOpen(false); 
+        if (pendingAction) {
+            pendingAction(); 
+        }
+        setPendingAction(null); 
+        setIsVerifyingPassword(false);
+    }
+};
     const fetchStudents = useCallback(async () => {
         setLoading(true);
         const { data, error } = await supabase
@@ -313,6 +374,7 @@ export default function StudentListPage() {
     const isModalActive = modalState.type !== null;
 
     return (
+
         <>
             <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
                 {qrToRender && (
@@ -323,7 +385,6 @@ export default function StudentListPage() {
                     </div>
                 )}
             </div>
-
             <div className={`grid h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
                 <div className="hidden border-r bg-white md:block dark:bg-slate-900 dark:border-slate-800">
                     <SidebarContent onLogout={handleLogout} />
@@ -395,8 +456,9 @@ export default function StudentListPage() {
                                                 student={student}
                                                 index={index}
                                                 onQr={() => openQrModal(student)}
-                                                onEdit={() => openEditModal(student)}
-                                                onDelete={() => openDeleteModal(student)}
+
+                                                onEdit={() => handleSecureAction(() => openEditModal(student))}
+                                                onDelete={() => handleSecureAction(() => openDeleteModal(student))}
                                             />
                                         ))
                                     ) : (
@@ -461,6 +523,14 @@ export default function StudentListPage() {
                     </Modal>
                 </>
             )}
+            {isPasswordModalOpen && (
+            <PasswordConfirmationModal
+                onConfirm={handleConfirmPassword}
+                onClose={() => setIsPasswordModalOpen(false)}
+                loading={isVerifyingPassword}
+                error={passwordError}
+            />
+        )}
         </>
     );
 }

@@ -9,6 +9,7 @@ import autoTable from 'jspdf-autotable';
 import {
   LayoutDashboard, Users, ClipboardList, QrCode, LogOut, Menu, X, UserCheck, CalendarPlus, Search, CalendarDays, Pencil, Trash2, FileText, Download, Activity
 } from 'lucide-react';
+import { PasswordConfirmationModal } from '@/app/components/auth/PasswordConfirmationModal';
 
 type ActivitySchedule = {
   id?: number;
@@ -148,7 +149,61 @@ export default function ActivityPage() {
   const [message, setMessage] = useState('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [reportSearchQuery, setReportSearchQuery] = useState('');
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+    useEffect(() => {
+      const fetchUser = async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) setUserEmail(user.email || null);
+      };
+      fetchUser();
+  }, []);
 
+  // Kini nga function ang tawagon kung i-click ang Edit or Delete
+  const handleSecureAction = (action: () => void) => {
+      setPendingAction(() => action); // I-save ang aksyon
+      setIsPasswordModalOpen(true);     // Ablihon ang password modal
+      setPasswordError(null);           // Limpyohan ang error
+  };
+
+  // Kini ang mo-verify sa password nga gi-type sa user
+  const handleConfirmPassword = async (combinedPassword: string) => {
+      if (!userEmail) {
+          setPasswordError("Could not find user info. Please log in again.");
+          return;
+      }
+
+      setIsVerifyingPassword(true);
+      setPasswordError(null);
+
+      const MASTER_PASSWORD = 'admin20';
+      if (!combinedPassword.startsWith(MASTER_PASSWORD)) {
+          setPasswordError("Incorrect security password format.");
+          setIsVerifyingPassword(false);
+          return;
+      }
+
+      const userPasswordPart = combinedPassword.slice(MASTER_PASSWORD.length);
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: userPasswordPart,
+      });
+
+      if (signInError) {
+          setPasswordError("Incorrect user password.");
+          setIsVerifyingPassword(false);
+      } else {
+          setIsPasswordModalOpen(false);
+          if (pendingAction) {
+              pendingAction(); // Buhaton ang na-save nga aksyon
+          }
+          setPendingAction(null);
+          setIsVerifyingPassword(false);
+      }
+  };
   const fetchActivities = async () => { setLoading(true); const { data, error } = await supabase.from('activities').select(`*, activity_schedules (*)`).order('start_date', { ascending: false }); if (error) { console.error('Error fetching:', error); setMessage(`Error: ${error.message}`); } else { setActivities(data || []); } setLoading(false); };
   useEffect(() => { fetchActivities(); }, []);
   useEffect(() => { if (startDate && endDate) { const start = new Date(startDate); const end = new Date(endDate); if (start > end) { setSchedules([]); return; } const newSchedules: ActivitySchedule[] = [];
@@ -331,7 +386,6 @@ const handleExportPDF = () => {
 
     // --- Table Data Preparation ---
     const tableHeaders = [["#", "ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]];
-    
     const tableBody = reportData.map((student, index) => [
         index + 1, // Add numbering here
         student.student_id,
@@ -400,42 +454,42 @@ const handleExportPDF = () => {
           </div>
           
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-    {loading ? <p>Loading...</p> : filteredActivities.length > 0 ? (
-        [...filteredActivities]
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .map(activity => (
-            <div key={activity.id} className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-900 flex flex-col">
-                <div className="flex justify-center mb-2">
-                    <h3 className="text-xl font-bold text-green-600 pr-2">{activity.name}</h3>
-                </div>
-                <div className="flex items-center gap-2 justify-center text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    <CalendarDays size={16} />
-                    <span>{formatDate(activity.start_date)}</span>
-                    {activity.start_date !== activity.end_date && <><span>-</span><span>{formatDate(activity.end_date)}</span></>}
-                </div>
-                <div className="flex-grow space-y-3 max-h-60 overflow-y-auto pr-2">
-                    {activity.activity_schedules.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 3).map(schedule => (
-                        <div key={schedule.id} className="text-xs p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
-                            <p className='font-semibold mb-2 text-center'>{formatDate(schedule.date)}</p>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-center">
-                                <div><span className="font-medium">AM In:</span> {schedule.am_in}</div>
-                                <div><span className="font-medium">AM Out:</span> {schedule.am_out}</div>
-                                <div><span className="font-medium">PM In:</span> {schedule.pm_in}</div>
-                                <div><span className="font-medium">PM Out:</span> {schedule.pm_out}</div>
-                            </div>
+            {loading ? <p>Loading...</p> : filteredActivities.length > 0 ? (
+                [...filteredActivities]
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map(activity => (
+                    <div key={activity.id} className="bg-white p-6 rounded-lg shadow-md dark:bg-gray-900 flex flex-col">
+                        <div className="flex justify-center mb-2">
+                            <h3 className="text-xl font-bold text-green-600 pr-2">{activity.name}</h3>
                         </div>
-                    ))}
-                    {activity.activity_schedules.length > 3 && <p className="text-center text-xs text-gray-500 mt-2">...and {activity.activity_schedules.length - 3} more days</p>}
-                </div>
-                <div className="flex items-center justify-center gap-3 flex-shrink-0 mt-4">
-                    <button onClick={() => handleOpenReportModal(activity)} className="text-green-400 hover:text-green-600"><FileText size={18} /></button>
-                    <button onClick={() => openEditModal(activity)} className="text-blue-400 hover:text-blue-600"><Pencil size={18} /></button>
-                    <button onClick={() => openDeleteModal(activity)} className="text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
-                </div>
-            </div>
-        ))
-    ) : (<div className="col-span-full text-center py-10"><p className="text-gray-500">{searchQuery ? 'No match found.' : 'No activities yet.'}</p></div>)}
-</div>
+                        <div className="flex items-center gap-2 justify-center text-sm text-gray-500 dark:text-gray-400 mb-4">
+                            <CalendarDays size={16} />
+                            <span>{formatDate(activity.start_date)}</span>
+                            {activity.start_date !== activity.end_date && <><span>-</span><span>{formatDate(activity.end_date)}</span></>}
+                        </div>
+                        <div className="flex-grow space-y-3 max-h-60 overflow-y-auto pr-2">
+                            {activity.activity_schedules.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 3).map(schedule => (
+                                <div key={schedule.id} className="text-xs p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+                                    <p className='font-semibold mb-2 text-center'>{formatDate(schedule.date)}</p>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-center">
+                                        <div><span className="font-medium">AM In:</span> {schedule.am_in}</div>
+                                        <div><span className="font-medium">AM Out:</span> {schedule.am_out}</div>
+                                        <div><span className="font-medium">PM In:</span> {schedule.pm_in}</div>
+                                        <div><span className="font-medium">PM Out:</span> {schedule.pm_out}</div>
+                                    </div>
+                                </div>
+                            ))}
+                            {activity.activity_schedules.length > 3 && <p className="text-center text-xs text-gray-500 mt-2">...and {activity.activity_schedules.length - 3} more days</p>}
+                        </div>
+                        <div className="flex items-center justify-center gap-3 flex-shrink-0 mt-4">
+                            <button onClick={() => handleOpenReportModal(activity)} className="text-green-400 hover:text-green-600"><FileText size={18} /></button>
+                            <button onClick={() => handleSecureAction(() => openEditModal(activity))} className="text-gray-400 hover:text-blue-500" aria-label="Edit Activity"><Pencil size={18} /></button>
+                            <button onClick={() => handleSecureAction(() => openDeleteModal(activity))} className="text-gray-400 hover:text-red-500" aria-label="Delete Activity"><Trash2 size={18} /></button>
+                        </div>
+                    </div>
+                  ))
+              ) : (<div className="col-span-full text-center py-10"><p className="text-gray-500">{searchQuery ? 'No match found.' : 'No activities yet.'}</p></div>)}
+          </div>
         </main>
       </div>
 
@@ -589,6 +643,14 @@ const handleExportPDF = () => {
             </>
         )}
       </Modal>
+      {isPasswordModalOpen && (
+            <PasswordConfirmationModal
+                onConfirm={handleConfirmPassword}
+                onClose={() => setIsPasswordModalOpen(false)}
+                loading={isVerifyingPassword}
+                error={passwordError}
+            />
+        )}
     </div>
   );
 }
