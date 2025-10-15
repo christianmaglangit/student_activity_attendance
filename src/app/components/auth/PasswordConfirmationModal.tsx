@@ -52,12 +52,12 @@ export const PasswordConfirmationModal: React.FC<PasswordConfirmationModalProps>
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-2.5 pr-10 bg-white border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500"
+                            className="w-full px-4 py-2.5 pr-10 dark:text-black bg-white border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500"
                         />
                         <button
                             type="button" 
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:text-black"
                             aria-label={showPassword ? "Hide password" : "Show password"}
                         >
                             {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
