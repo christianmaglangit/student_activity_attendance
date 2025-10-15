@@ -11,7 +11,6 @@ import {
     CheckCircle, AlertTriangle as WarningIcon, XCircle, Clock
 } from 'lucide-react';
 
-// --- Type Definitions (No Changes) ---
 type ActivitySchedule = {
     id?: number;
     activity_id?: number;
@@ -44,7 +43,6 @@ type AttendanceRecord = Student & {
     statusType: 'success' | 'error' | 'warning';
 };
 
-// --- Reusable UI Components (No Changes) ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
     const isActive = pathname.startsWith(href);
@@ -79,7 +77,6 @@ const Button: React.FC<
     );
 };
 
-// --- Sidebar Content Component (No Changes) ---
 const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
     <div className="flex h-full max-h-screen flex-col gap-2">
         <div className="flex h-16 items-center border-b px-4 lg:px-6 dark:border-slate-800">
@@ -105,7 +102,6 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
     </div>
 );
 
-// --- Attendance Log Item Component (No Changes) ---
 const AttendanceLogItem = ({ record }: { record: AttendanceRecord }) => {
     const statusInfo = {
         success: { icon: CheckCircle, color: 'text-green-500' },
@@ -129,9 +125,7 @@ const AttendanceLogItem = ({ record }: { record: AttendanceRecord }) => {
     );
 };
 
-// --- Main Scan Attendance Page Component ---
 export default function ScanAttendancePage() {
-    // State and Hooks (No Changes)
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
     const [allActivities, setAllActivities] = useState<Activity[]>([]);
@@ -142,16 +136,13 @@ export default function ScanAttendancePage() {
     const [scannedStudents, setScannedStudents] = useState<AttendanceRecord[]>([]);
     const router = useRouter();
 
-    // All Functions
     useEffect(() => {
         setCurrentDateTime(new Date());
         const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // --- MODIFIED USEEFFECT FOR CAMERA STARTUP AND CLEANUP ---
     useEffect(() => {
-        // Only run this effect if the camera is intended to be on AND an activity is selected.
         if (isCameraOn && selectedActivity) {
             const scannerId = 'reader';
             const html5QrCode = new Html5Qrcode(scannerId);
@@ -159,7 +150,6 @@ export default function ScanAttendancePage() {
 
             const determineAttendanceStatus = (activity: Activity): { status: string, type: 'success' | 'warning' | 'error' } => {
                 const now = new Date();
-                // Ensure date comparison is consistent by normalizing to UTC midnight
                 const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
                 const todaySchedule = activity.activity_schedules.find(s => s.date === todayStr);
                 
@@ -172,15 +162,12 @@ export default function ScanAttendancePage() {
                     return date;
                 };
                 
-                // Allow a grace period of 2 hours (120 minutes) for scanning
                 const gracePeriod = 120 * 60000; 
-
                 const amIn = parseTime(todaySchedule.am_in);
                 const amOut = parseTime(todaySchedule.am_out);
                 const pmIn = parseTime(todaySchedule.pm_in);
                 const pmOut = parseTime(todaySchedule.pm_out);
 
-                // Check for Time-In/Out windows
                 if (now >= amIn && now < new Date(amIn.getTime() + gracePeriod)) return { status: 'Time In (AM)', type: 'success' };
                 if (now >= amOut && now < new Date(amOut.getTime() + gracePeriod)) return { status: 'Time Out (AM)', type: 'success' };
                 if (now >= pmIn && now < new Date(pmIn.getTime() + gracePeriod)) return { status: 'Time In (PM)', type: 'success' };
@@ -199,7 +186,6 @@ export default function ScanAttendancePage() {
                         const qrData = JSON.parse(decodedText);
                         studentId = qrData.student_id;
                     } catch (e) {
-                        // Fallback if it's not JSON (just the raw student ID)
                         studentId = decodedText;
                     }
 
@@ -208,7 +194,6 @@ export default function ScanAttendancePage() {
                         return;
                     }
                     
-                    // 1. Fetch Student Data
                     const { data: studentData, error: studentError } = await supabase
                         .from('students')
                         .select('student_id, full_name, gender, course, year_level')
@@ -220,7 +205,6 @@ export default function ScanAttendancePage() {
                         return;
                     }
 
-                    // 2. Determine Attendance Status
                     const attendance = determineAttendanceStatus(selectedActivity!);
 
                     if (attendance.type === 'error' || attendance.type === 'warning') {
@@ -230,7 +214,6 @@ export default function ScanAttendancePage() {
                         return;
                     }
                     
-                    // 3. Check for Existing Scan for the current status (e.g., prevent double AM Time-In)
                     const { data: existingRecord } = await supabase
                         .from('attendance_report')
                         .select('id')
@@ -244,7 +227,6 @@ export default function ScanAttendancePage() {
                         return;
                     }
                     
-                    // 4. Record Attendance
                     await supabase.from('attendance_report').insert({ 
                         activity_id: selectedActivity!.id, 
                         student_id: studentData.student_id, 
@@ -252,11 +234,11 @@ export default function ScanAttendancePage() {
                         scanned_at: new Date().toISOString() 
                     });
 
-                    // 5. Update UI Log
+
                     const newRecord: AttendanceRecord = { ...studentData, scanTime: new Date().toLocaleTimeString(), status: attendance.status, statusType: attendance.type };
                     setScannedStudents(prev => [newRecord, ...prev]);
                     
-                    // Success feedback
+
                     Swal.fire({ 
                         icon: 'success', 
                         title: `${attendance.status} Recorded!`, 
@@ -266,7 +248,6 @@ export default function ScanAttendancePage() {
                     });
 
                 } finally {
-                    // Prevent rapid scanning for 2 seconds
                     setTimeout(() => { isProcessing = false; }, 2000);
                 }
             };
@@ -278,11 +259,9 @@ export default function ScanAttendancePage() {
                     const size = Math.max(250, Math.floor(minEdge * 0.8));
                     return { width: size, height: size, };
                 },
-                // *** FIX: Ensures rear camera stream is used correctly on mobile ***
                 disableFlip: true 
             };
             
-            // Start the scanner, prioritizing the rear camera ("environment")
             html5QrCode.start({ facingMode: "environment" }, config, processScan, () => {})
                 .catch(async (err) => {
                     console.error("Camera Start Error:", err);
@@ -295,7 +274,6 @@ export default function ScanAttendancePage() {
                     setCameraOn(false);
                 });
 
-            // Cleanup function: Stops the scanner when the component unmounts or state changes
             return () => {
                 const stopScanner = async () => {
                     if (html5QrCode && html5QrCode.isScanning) {
@@ -310,9 +288,8 @@ export default function ScanAttendancePage() {
                 stopScanner();
             };
         }
-    }, [isCameraOn, selectedActivity]); // Dependency array
+    }, [isCameraOn, selectedActivity]); 
 
-    // --- Activity Fetching and Logic (No Changes) ---
     useEffect(() => {
         const fetchActivities = async () => {
             const { data } = await supabase.from('activities').select('*, activity_schedules(*)');

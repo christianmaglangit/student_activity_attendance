@@ -14,7 +14,6 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import JSZip from 'jszip';
 
-// --- Type Definition ---
 type Student = {
     student_id: string;
     full_name: string;
@@ -26,8 +25,6 @@ type Student = {
 };
 
 type StudentFormData = Omit<Student, 'created_at' | 'user_id'>;
-
-// --- Reusable UI Components (STYLES UPDATED) ---
 
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
@@ -227,42 +224,32 @@ const ListItemSkeleton = () => (
 );
 
 
-// --- Main Student List Page Component ---
 export default function StudentListPage() {
-    // State and hooks
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [students, setStudents] = useState<Student[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
-
     const [modalState, setModalState] = useState<{
         type: 'add' | 'edit' | 'delete' | 'qr' | null;
         student: Student | null;
     }>({ type: null, student: null });
-
     const initialFormState: StudentFormData = { student_id: '', full_name: '', gender: '', course: '', year_level: '', };
     const [formData, setFormData] = useState<StudentFormData>(initialFormState);
-
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [message, setMessage] = useState('');
-    
     const qrCodeRef = useRef<HTMLDivElement>(null);
     const hiddenQrRef = useRef<HTMLDivElement>(null);
     const [qrToRender, setQrToRender] = useState<Student | null>(null);
-
     const router = useRouter();
-
     const genderOptions = ['Male', 'Female'];
     const yearLevelOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-
-    // Functions
     const fetchStudents = useCallback(async () => {
         setLoading(true);
         const { data, error } = await supabase
             .from('students')
             .select('*')
-            .order('full_name', { ascending: true }); // Sort alphabetically
+            .order('full_name', { ascending: true }); 
         if (error) {
             setMessage(`Error: ${error.message}`);
         } else if (data) {
@@ -275,7 +262,6 @@ export default function StudentListPage() {
         fetchStudents();
     }, [fetchStudents]);
 
-    // --- MODIFIED: Added course and year_level to search filter ---
     useEffect(() => {
         const lowercasedQuery = searchQuery.toLowerCase();
         const results = students.filter(student =>
@@ -298,7 +284,6 @@ export default function StudentListPage() {
 
     const closeModal = () => { setModalState({ type: null, student: null }); setFormData(initialFormState); setMessage(''); };
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { const { id, value } = e.target; setFormData(prev => ({ ...prev, [id]: value })); };
-    
     const handleAddStudent = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); const { data: { user } } = await supabase.auth.getUser(); if (!user) { setMessage("Error: You must be logged in to add a student."); setLoading(false); return; } const studentDataWithUser = { ...formData, user_id: user.id }; const { data, error } = await supabase.from('students').insert(studentDataWithUser).select().single(); if (error) { setMessage(`Error: ${error.message}`); } else if (data) { closeModal(); setModalState({ type: 'qr', student: data as Student }); fetchStudents(); } setLoading(false); };
     const handleUpdateStudent = async (e: React.FormEvent) => { e.preventDefault(); if (!modalState.student) return; setLoading(true); const { error } = await supabase.from('students').update(formData).eq('student_id', modalState.student.student_id); if (error) { setMessage(`Error: ${error.message}`); } else { closeModal(); fetchStudents(); } setLoading(false); };
     const handleDeleteStudent = async () => { if (!modalState.student) return; setLoading(true); const { error } = await supabase.from('students').delete().eq('student_id', modalState.student.student_id); if (error) { alert(`Error: ${error.message}`); } else { closeModal(); fetchStudents(); } setLoading(false); };
@@ -363,7 +348,7 @@ export default function StudentListPage() {
                                 <Input
                                     id="search-id"
                                     type="text"
-                                    placeholder="Search name, ID, course, or year..." // <-- UPDATED PLACEHOLDER
+                                    placeholder="Search name, ID, course, or year..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="text-sm"

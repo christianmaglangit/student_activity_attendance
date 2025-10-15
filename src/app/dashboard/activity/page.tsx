@@ -10,7 +10,6 @@ import {
   LayoutDashboard, Users, ClipboardList, QrCode, LogOut, Menu, X, UserCheck, CalendarPlus, Search, CalendarDays, Pencil, Trash2, FileText, Download, Activity
 } from 'lucide-react';
 
-// --- Type Definitions ---
 type ActivitySchedule = {
   id?: number;
   activity_id?: number;
@@ -27,7 +26,7 @@ type ActivityType = {
   start_date: string;
   end_date: string;
   created_at: string;
-  user_id: string; // <-- Idugang kini nga linya
+  user_id: string; 
   activity_schedules: ActivitySchedule[];
 };
 
@@ -43,8 +42,11 @@ type ReportRow = {
     scans_completed: number;
 };
 
+type UserProfile = {
+  name: string;
+  collegedep: string | null;
+};
 
-// --- Reusable UI Components ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
   const pathname = usePathname();
   const isActive = pathname.startsWith(href);
@@ -102,10 +104,27 @@ const SidebarContent = () => {
     };
     return (
         <div className="flex h-full max-h-screen flex-col gap-2">
-            <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6"><Link href="/dashboard" className="flex items-center gap-2 font-semibold"><UserCheck className="h-6 w-6 text-green-600" /><span>Student Activity</span></Link></div>
-            <div className="flex-1"><nav className="grid items-start px-2 text-sm font-medium lg:px-4"><NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink><NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink><NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink><NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink></nav></div>
-            <div className="mt-auto p-4"><button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"><LogOut className="h-5 w-5" /> Logout</button></div>
-            <div className="container mx-auto text-center px-4"> <p className="text-sm text-gray-600 dark:text-gray-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
+            <div className="flex h-16 items-center border-b px-4 lg:px-6 dark:border-slate-800">
+                <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
+                    <UserCheck className="h-6 w-6 text-green-600" />
+                    <span className="text-slate-800 dark:text-white">Student Activity Attendance</span>
+                </Link>
+            </div>
+            <div className="flex-1 py-2">
+                <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+                    <NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
+                    <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
+                    <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
+                    <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
+                </nav>
+            </div>
+            <div className="mt-auto p-4 border-t dark:border-slate-800">
+                <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50">
+                    <LogOut className="h-5 w-5" />
+                    Logout
+                </button>
+            </div>
+            <div className="pb-4 text-center px-4"> <p className="text-xs text-slate-500 dark:text-slate-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
         </div>
     );
 };
@@ -127,11 +146,12 @@ export default function ActivityPage() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportData, setReportData] = useState<ReportRow[]>([]);
   const [message, setMessage] = useState('');
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [reportSearchQuery, setReportSearchQuery] = useState('');
 
   const fetchActivities = async () => { setLoading(true); const { data, error } = await supabase.from('activities').select(`*, activity_schedules (*)`).order('start_date', { ascending: false }); if (error) { console.error('Error fetching:', error); setMessage(`Error: ${error.message}`); } else { setActivities(data || []); } setLoading(false); };
   useEffect(() => { fetchActivities(); }, []);
   useEffect(() => { if (startDate && endDate) { const start = new Date(startDate); const end = new Date(endDate); if (start > end) { setSchedules([]); return; } const newSchedules: ActivitySchedule[] = [];
-  // eslint-disable-next-line prefer-const
   let currentDate = new Date(start); while (currentDate <= end) { const dateStr = currentDate.toISOString().split('T')[0]; const existingSchedule = selectedActivity?.activity_schedules.find(s => s.date === dateStr); newSchedules.push({ date: dateStr, am_in: existingSchedule?.am_in || '08:00', am_out: existingSchedule?.am_out || '12:00', pm_in: existingSchedule?.pm_in || '13:00', pm_out: existingSchedule?.pm_out || '17:00' }); currentDate.setDate(currentDate.getDate() + 1); } setSchedules(newSchedules); } else { setSchedules([]); } }, [startDate, endDate, selectedActivity]);
   const handleScheduleChange = (index: number, field: keyof Omit<ActivitySchedule, 'id' | 'activity_id' | 'date'>, value: string) => { const updatedSchedules = [...schedules]; updatedSchedules[index] = { ...updatedSchedules[index], [field]: value }; setSchedules(updatedSchedules); };
   const clearForm = () => { setActivityName(''); setStartDate(''); setEndDate(''); setSchedules([]); setMessage(''); setSelectedActivity(null); };
@@ -139,7 +159,6 @@ export default function ActivityPage() {
     e.preventDefault();
     setLoading(true);
 
-    // Step 1: Get the current logged-in user
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
         setMessage("Error: You must be logged in to create an activity.");
@@ -147,14 +166,13 @@ export default function ActivityPage() {
         return;
     }
 
-    // Step 2: Insert the new activity with the user's ID
     const { data: newActivity, error: activityError } = await supabase
         .from('activities')
         .insert({
             name: activityName,
             start_date: startDate,
             end_date: endDate,
-            user_id: user.id // <-- Important: Associate with the user
+            user_id: user.id 
         })
         .select()
         .single();
@@ -165,7 +183,6 @@ export default function ActivityPage() {
         return;
     }
 
-    // Step 3: Insert the corresponding schedules
     const schedulesWithActivityId = schedules.map(sc => ({
         ...sc,
         activity_id: newActivity.id
@@ -177,7 +194,6 @@ export default function ActivityPage() {
 
     if (scheduleError) {
         setMessage(`Error saving schedules: ${scheduleError.message}`);
-        // If schedules fail, delete the activity we just created (rollback)
         await supabase.from('activities').delete().eq('id', newActivity.id);
     } else {
         setAddModalOpen(false);
@@ -187,18 +203,39 @@ export default function ActivityPage() {
 
     setLoading(false);
 };
+
+const fetchUserProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data, error } = await supabase
+        .from('users')  
+        .select('name, collegedep')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+      } else if (data) {
+        setUserProfile(data);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchActivities();
+    fetchUserProfile(); 
+  }, []);
+
   const handleUpdateActivity = async (e: React.FormEvent) => { e.preventDefault(); if (!selectedActivity) return; setLoading(true); const { error: uErr } = await supabase.from('activities').update({ name: activityName, start_date: startDate, end_date: endDate }).eq('id', selectedActivity.id); if (uErr) { setMessage(`Error: ${uErr.message}`); setLoading(false); return; } await supabase.from('activity_schedules').delete().eq('activity_id', selectedActivity.id); const s = schedules.map(sc => ({ ...sc, activity_id: selectedActivity.id })); const { error: iErr } = await supabase.from('activity_schedules').insert(s); if (iErr) { setMessage(`Error: ${iErr.message}`); } else { setEditModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
   const handleDeleteActivity = async () => { if (!selectedActivity) return; setLoading(true); const { error } = await supabase.from('activities').delete().eq('id', selectedActivity.id); if (error) { setMessage(`Error: ${error.message}`); } else { setDeleteModalOpen(false); fetchActivities(); clearForm(); } setLoading(false); };
   const openEditModal = (activity: ActivityType) => { setSelectedActivity(activity); setActivityName(activity.name); setStartDate(activity.start_date); setEndDate(activity.end_date); setSchedules(activity.activity_schedules); setEditModalOpen(true); };
   const openDeleteModal = (activity: ActivityType) => { setSelectedActivity(activity); setDeleteModalOpen(true); };
   
-  // --- GI-AYO: Mas reliable nga paagi sa pagkuha ug report data ---
   const handleOpenReportModal = async (activity: ActivityType) => {
     setSelectedActivity(activity);
     setReportModalOpen(true);
     setReportLoading(true);
 
-    // Step 1: Kuhaon ang tanang attendance records para sa specific activity
     const { data: attendanceData, error: attendanceError } = await supabase
       .from('attendance_report')
       .select('student_id, scanned_at, status')
@@ -211,10 +248,8 @@ export default function ActivityPage() {
       return;
     }
 
-    // Step 2: Kuhaon ang unique student IDs gikan sa attendance records
     const studentIds = [...new Set(attendanceData.map((att) => att.student_id))];
 
-    // Step 3: Kuhaon ang detalye anang mga studenta sa isa lang ka query
     const { data: studentsData, error: studentsError } = await supabase
       .from('students')
       .select('student_id, full_name, course, year_level')
@@ -227,10 +262,8 @@ export default function ActivityPage() {
       return;
     }
 
-    // Step 4: I-combine ang duha ka data sa sulod sa code
     const reportMap = new Map<string, ReportRow>();
 
-    // I-initialize ang report map sa tanang student nga naay attendance
     studentsData.forEach(student => {
         reportMap.set(student.student_id, {
             student_id: student.student_id,
@@ -242,7 +275,6 @@ export default function ActivityPage() {
         });
     });
     
-    // Butangan ug value ang time-in/out base sa attendance records
     attendanceData.forEach(record => {
       const studentEntry = reportMap.get(record.student_id);
       if (studentEntry) {
@@ -254,7 +286,6 @@ export default function ActivityPage() {
       }
     });
 
-    // Final processing (pag-ihap sa scans ug pag-sort)
     const finalData = Array.from(reportMap.values());
     finalData.forEach(entry => {
       let count = 0;
@@ -271,9 +302,56 @@ export default function ActivityPage() {
   };
 
 
-  const handleExportPDF = () => { if (!selectedActivity || reportData.length === 0) return; const doc = new jsPDF({ orientation: 'landscape' }); const pageWidth = doc.internal.pageSize.getWidth(); doc.setFontSize(14); doc.setTextColor(0); doc.text(`College of Computer Studies`, pageWidth / 2, 20, { align: "center" }); doc.text(`Computer Studies Student Organization`, pageWidth / 2, 28, { align: "center" }); doc.text(`${selectedActivity.name} Attendance`, pageWidth / 2, 36, { align: "center" }); doc.setFontSize(11); doc.setTextColor(100); const formattedStartDate = formatDate(selectedActivity.start_date); const formattedEndDate = formatDate(selectedActivity.end_date); const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`; doc.text(dateString, pageWidth / 2, 44, { align: "center" }); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 50, { align: "center" }); const tableHeaders = [["ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]]; const tableBody = reportData.map(student => [ student.student_id, student.full_name, `${student.course} - ${student.year_level}`, student['Time In (AM)'] || '--', student['Time Out (AM)'] || '--', student['Time In (PM)'] || '--', student['Time Out (PM)'] || '--', `${student.scans_completed} / 4` ]); autoTable(doc, { head: tableHeaders, body: tableBody, startY: 58, theme: 'striped', headStyles: { fillColor: [22, 160, 133] }, }); const safeFileName = selectedActivity.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(); doc.save(`attendance_report_${safeFileName}.pdf`); };
+const handleExportPDF = () => {
+    if (!selectedActivity || reportData.length === 0 || !userProfile) return; 
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text(userProfile.name, pageWidth / 2, 20, { align: "center" });
+    doc.text(userProfile.collegedep || '', pageWidth / 2, 28, { align: "center" });
+    doc.text(`${selectedActivity.name} ATTENDANCE`, pageWidth / 2, 36, { align: "center" });
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    const formattedStartDate = formatDate(selectedActivity.start_date);
+    const formattedEndDate = formatDate(selectedActivity.end_date);
+    const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`;
+    doc.text(dateString, pageWidth / 2, 44, { align: "center" });
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 50, { align: "center" });
+    const tableHeaders = [["ID Number", "Name", "Course & Year", "AM In", "AM Out", "PM In", "PM Out", "Scans"]];
+    const tableBody = reportData.map(student => [
+        student.student_id,
+        student.full_name,
+        `${student.course} - ${student.year_level}`,
+        student['Time In (AM)'] || '--',
+        student['Time Out (AM)'] || '--',
+        student['Time In (PM)'] || '--',
+        student['Time Out (PM)'] || '--',
+        `${student.scans_completed} / 4`
+    ]);
+    autoTable(doc, {
+        head: tableHeaders,
+        body: tableBody,
+        startY: 58,
+        theme: 'striped',
+        headStyles: { fillColor: [22, 160, 133] },
+    });
+    const safeFileName = selectedActivity.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    doc.save(`attendance_report_${safeFileName}.pdf`);
+  };
+
   const closeModal = () => { setAddModalOpen(false); setEditModalOpen(false); setDeleteModalOpen(false); setReportModalOpen(false); clearForm(); }
   const filteredActivities = useMemo(() => { if (!searchQuery.trim()) return activities; return activities.filter(act => act.name.toLowerCase().includes(searchQuery.toLowerCase())); }, [activities, searchQuery]);
+  const filteredReportData = useMemo(() => {
+    if (!reportSearchQuery.trim()) {
+      return reportData;
+    }
+    return reportData.filter(student =>
+      student.student_id.toLowerCase().includes(reportSearchQuery.toLowerCase())
+    );
+  }, [reportData, reportSearchQuery]);
+
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
@@ -370,48 +448,64 @@ export default function ActivityPage() {
       </Modal>
 
       <Modal isOpen={isReportModalOpen} onClose={closeModal} title={`Attendance for ${selectedActivity?.name}`} size="xl">
-        {reportLoading ? (
-            <p className="text-center">Loading report...</p>
-        ) : (
-            <>
-                {reportData.length > 0 ? (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                                <tr>
-                                    <th className="px-6 py-3">ID Number</th>
-                                    <th className="px-6 py-3">Name</th>
-                                    <th className="px-6 py-3">Course & Year</th>
-                                    <th className="px-6 py-3">AM In</th>
-                                    <th className="px-6 py-3">AM Out</th>
-                                    <th className="px-6 py-3">PM In</th>
-                                    <th className="px-6 py-3">PM Out</th>
-                                    <th className="px-6 py-3 text-center">Scans</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {reportData.map(student => {
-                                    const scans = student.scans_completed;
-                                    const scanStatusColor = scans === 4 ? 'text-green-500' : scans > 0 ? 'text-yellow-500' : 'text-red-500';
-                                    return (
-                                        <tr key={student.student_id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                                            <td className="px-6 py-4 font-mono">{student.student_id}</td>
-                                            <td className="px-6 py-4 font-medium">{student.full_name}</td>
-                                            <td className="px-6 py-4">{student.course} - {student.year_level}</td>
-                                            <td className="px-6 py-4">{student['Time In (AM)'] || '--'}</td>
-                                            <td className="px-6 py-4">{student['Time Out (AM)'] || '--'}</td>
-                                            <td className="px-6 py-4">{student['Time In (PM)'] || '--'}</td>
-                                            <td className="px-6 py-4">{student['Time Out (PM)'] || '--'}</td>
-                                            <td className={`px-6 py-4 font-bold text-center ${scanStatusColor}`}>{scans} / 4</td>
-                                        </tr>
-                                    )
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
-                    <p className="text-center text-gray-500">No attendance records found.</p>
-                )}
+    {reportLoading ? (
+        <p className="text-center">Loading report...</p>
+    ) : (
+        <>
+            {/* --- START: ADDED SEARCH BAR --- */}
+            <div className="flex justify-between items-center mb-4 gap-4">
+                <div className="relative flex-grow max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search by ID Number..."
+                        value={reportSearchQuery}
+                        onChange={(e) => setReportSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border-2 bg-white border-gray-200 rounded-lg focus:outline-none focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        suppressHydrationWarning
+                    />
+                </div>
+                 <Button onClick={handleExportPDF} disabled={reportData.length === 0}>
+                    <Download size={18} className="inline mr-2" />
+                    Export to PDF
+                </Button>
+            </div>
+            {/* --- END: ADDED SEARCH BAR --- */}
+
+            {/* --- MODIFIED THIS SECTION --- */}
+            {filteredReportData.length > 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        {/* thead remains the same */}
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                           {/* ... table headers ... */}
+                        </thead>
+                        <tbody>
+                            {/* Use the filtered data here */}
+                            {filteredReportData.map(student => {
+                                const scans = student.scans_completed;
+                                const scanStatusColor = scans === 4 ? 'text-green-500' : scans > 0 ? 'text-yellow-500' : 'text-red-500';
+                                return (
+                                    <tr key={student.student_id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                                        <td className="px-6 py-4 font-mono">{student.student_id}</td>
+                                        <td className="px-6 py-4 font-medium">{student.full_name}</td>
+                                        <td className="px-6 py-4">{student.course} - {student.year_level}</td>
+                                        <td className="px-6 py-4">{student['Time In (AM)'] || '--'}</td>
+                                        <td className="px-6 py-4">{student['Time Out (AM)'] || '--'}</td>
+                                        <td className="px-6 py-4">{student['Time In (PM)'] || '--'}</td>
+                                        <td className="px-6 py-4">{student['Time Out (PM)'] || '--'}</td>
+                                        <td className={`px-6 py-4 font-bold text-center ${scanStatusColor}`}>{scans} / 4</td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <p className="text-center text-gray-500">
+                    {reportData.length === 0 ? "No attendance records found." : "No matching ID Number found."}
+                </p>
+            )}
                 <div className="mt-6 pt-4 border-t dark:border-gray-700 flex justify-end">
                     <Button onClick={handleExportPDF} disabled={reportData.length === 0}>
                         <Download size={18} className="inline mr-2" />
