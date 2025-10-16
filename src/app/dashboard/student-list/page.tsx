@@ -400,7 +400,7 @@ const handleConfirmPassword = async (combinedPassword: string) => {
                         <button className="md:hidden" onClick={() => setSidebarOpen(!isSidebarOpen)}>
                             {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                         </button>
-                        <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Student Roster</h1>
+                        <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Students List</h1>
                     </header>
                     
                     <main className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-filter duration-300 ${isModalActive ? 'blur-sm' : ''}`}>

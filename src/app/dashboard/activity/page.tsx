@@ -439,9 +439,17 @@ const handleExportPDF = () => {
       <div className={`fixed top-0 left-0 h-full w-[280px] border-r bg-white dark:bg-gray-900 dark:border-gray-800 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${ isSidebarOpen ? 'translate-x-0' : '-translate-x-full' }`}><SidebarContent /></div>
 
       <div className="flex flex-col bg-gray-100/40 dark:bg-gray-800/40">
-        <header className="flex h-14 items-center gap-4 border-b bg-white px-4 lg:h-[60px] lg:px-6 dark:bg-gray-900/40 dark:border-gray-800">
-          <button className="md:hidden" onClick={() => setSidebarOpen(!isSidebarOpen)}>{isSidebarOpen ? <X/> : <Menu/>}</button>
-          <h1 className="text-lg font-semibold">Activity List</h1>
+        <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
+            <button
+                className="md:hidden p-2 -ml-2"
+                onClick={() => setSidebarOpen(!isSidebarOpen)}
+                aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+            >
+                {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+            <div className="w-full flex-1">
+                <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Activities</h1>
+            </div>
         </header>
 
         <main className={`flex-1 overflow-y-auto p-4 lg:p-6`}>

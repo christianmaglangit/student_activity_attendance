@@ -181,10 +181,6 @@ export default function DashboardPage() {
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-                    <h1 className="text-2xl font-bold tracking-tight mb-6 text-slate-800 dark:text-white">
-                        Dashboard Overview
-                    </h1>
-
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         <StatCard title="Total Students" value={stats.totalStudents} icon={Users} isLoading={loadingStats} />
                         <StatCard title="Active Activities" value={stats.activeActivities} icon={Activity} isLoading={loadingStats} />
