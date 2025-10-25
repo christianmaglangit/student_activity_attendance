@@ -1,7 +1,14 @@
-import type { NextConfig } from "next";
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Your other configs might be here...
 
-const nextConfig: NextConfig = {
-  /* config options here */
+  // Add this line:
+  output: 'export',
+
+  // Optional but recommended for Capacitor:
+  images: {
+    unoptimized: true,
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
