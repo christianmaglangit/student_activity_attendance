@@ -319,7 +319,7 @@ export default function ActivityPage() {
                 return;
             }
             const newSchedules: ActivitySchedule[] = [];
-            let currentDate = new Date(start);
+            const currentDate = new Date(start);
 
             while (currentDate <= end) {
                  // Ensure we are using the date part only, consistent with how dates are stored/compared
