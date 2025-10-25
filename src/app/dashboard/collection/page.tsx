@@ -272,7 +272,13 @@ export default function CollectionPage() {
             setCollections(collectionsRes.data as Collection[]);
             setStudents(studentsRes.data as Student[]);
             setPayments(paymentsRes.data as StudentCollection[]);
-        } catch (error: any) { console.error('Error loading initial data:', error.message); }
+        } catch (error: unknown) { 
+        if (error instanceof Error) {
+            console.error('Error loading initial data:', error.message); 
+        } else {
+            console.error('An unknown error occurred:', error);
+        }
+        }
         finally { setLoading(false); }
     }, []);
 
@@ -474,8 +480,10 @@ export default function CollectionPage() {
             doc.save(`collection_report_${new Date().toISOString().split('T')[0]}.pdf`);
             setModalState(null);
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+            if (error instanceof Error)
             console.error("Error generating report:", error.message);
+            if (error instanceof Error)
             alert(`Failed to generate report: ${error.message}`);
         } finally {
             setIsGeneratingReport(false);
