@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+// Import usePathname direkta diri para magamit sa BottomNavBar
+import { usePathname, useRouter } from 'next/navigation'; 
 import { supabase } from '@/lib/supabaseClient';
 import {
     LayoutDashboard,
@@ -10,11 +11,9 @@ import {
     ClipboardList,
     QrCode,
     LogOut,
-    Menu,
-    X,
     UserCheck,
     CheckCircle,
-    Activity
+    Activity,
 } from 'lucide-react';
 
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
@@ -54,6 +53,7 @@ const StatCard = ({ title, value, icon: Icon, isLoading }: { title: string; valu
     </div>
 );
 
+// This is the desktop sidebar, it remains unchanged
 const SidebarContent = () => {
     const router = useRouter();
 
@@ -77,6 +77,7 @@ const SidebarContent = () => {
                     <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
                     <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
                     <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
+                    <NavLink href="/dashboard/collection" icon={Activity}>Collection</NavLink>
                 </nav>
             </div>
             <div className="mt-auto flex flex-col gap-2 p-4 border-t dark:border-slate-800">
@@ -87,7 +88,7 @@ const SidebarContent = () => {
                     <LogOut className="h-5 w-5" />
                     Logout
                 </button>
-                 <div className="pt-2 text-center">
+                <div className="pt-2 text-center">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                         Developed by: <strong>Christian B. Maglangit</strong>
                     </p>
@@ -97,15 +98,80 @@ const SidebarContent = () => {
     );
 };
 
+// --- NEW COMPONENT FOR BOTTOM NAV LINKS ---
+const BottomNavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
+    const pathname = usePathname();
+    // Match root /dashboard exactly, or other paths by start
+    const isActive = href === "/dashboard" 
+        ? pathname === href 
+        : href !== "/" && pathname.startsWith(href);
+    
+    return (
+        <Link
+            href={href}
+            className={`flex flex-col items-center justify-center gap-1 p-2 transition-colors ${
+                isActive ? 'text-red-600' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+        >
+            <Icon className="h-6 w-6" />
+            <span className="text-xs font-medium">{children}</span>
+        </Link>
+    );
+};
+
+const BottomNavBar = () => {
+    return (
+        <nav className="fixed bottom-0 left-0 right-0 z-20 h-20 border-t bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.06)] md:hidden dark:bg-slate-900 dark:border-slate-800">
+            
+            <div className="mx-auto grid h-16 max-w-lg grid-cols-5 items-center px-2">
+                <BottomNavLink href="/dashboard" icon={LayoutDashboard}>Home</BottomNavLink>
+                <BottomNavLink href="/dashboard/student-list" icon={Users}>Students</BottomNavLink>
+                
+                <div className="flex justify-center">
+                    <Link
+                        href="/dashboard/scan-attendance"
+                        className="flex flex-col h-16 w-16 -mt-6 items-center justify-center rounded-full bg-red-600 text-white shadow-lg"
+                        aria-label="Scan QR Code"
+                    >
+                        <QrCode className="h-7 w-7" />
+                        <span className="text-sm font-medium">Scan</span>
+                    </Link>
+                </div>
+                
+                <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
+                
+                {/* Placeholder "Collection" link as requested */}
+                <BottomNavLink href="/dashboard/collection" icon={Activity}>Collection</BottomNavLink>
+            </div>
+
+            {/* --- FOOTER TEXT --- */}
+            <div className="text-center pb-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Developed by: <strong>Christian B. Maglangit</strong>
+                </p>
+            </div>
+        </nav>
+    );
+};
+
 
 export default function DashboardPage() {
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    // Removed isSidebarOpen state
     const [loadingStats, setLoadingStats] = useState(true);
-    const [stats, setStats] = useState({
+    const [stats, setStats] =useState({
         totalStudents: 0,
         activeActivities: 0,
         scansToday: 0
     });
+
+    // --- MOVED FROM SIDEBAR ---
+    const router = useRouter();
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push('/');
+        router.refresh();
+    };
+    // -------------------------
 
     useEffect(() => {
         const fetchDashboardStats = async () => {
@@ -148,39 +214,36 @@ export default function DashboardPage() {
     return (
         <div className="grid h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
 
+            {/* Desktop Sidebar (unchanged) */}
             <aside className="hidden border-r bg-white md:block dark:bg-slate-900 dark:border-slate-800">
                 <SidebarContent />
             </aside>
 
-            <div
-                className={`fixed inset-0 z-30 bg-black/60 transition-opacity duration-300 md:hidden ${
-                    isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                }`}
-                onClick={() => setSidebarOpen(false)}
-            />
-            <div
-                className={`fixed top-0 left-0 h-full w-[280px] border-r bg-white dark:bg-slate-900 dark:border-slate-800 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${
-                    isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
-            >
-                <SidebarContent />
-            </div>
+            {/* --- REMOVED MOBILE SIDEBAR AND OVERLAY --- */}
 
             <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+                
+                {/* --- MODIFIED HEADER --- */}
                 <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
-                    <button
-                        className="md:hidden p-2 -ml-2"
-                        onClick={() => setSidebarOpen(!isSidebarOpen)}
-                        aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-                    >
-                        {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                    </button>
-                    <div className="w-full flex-1">
-                        <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Dashboard</h1>
+                                        
+                    <div className="w-full flex-1 flex items-center justify-between">
+                        <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
+                            Student Activity Attendance {/* Title Updated */}
+                        </h1>
+                        {/* Logout Button Added */}
+                        <button
+                            onClick={handleLogout}
+                            className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50"
+                            aria-label="Logout"
+                        >
+                            <LogOut className="h-5 w-5" />
+                        </button>
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+                {/* --- MODIFIED MAIN CONTENT AREA --- */}
+                {/* pb-20 (80px) kay match sa h-20 (80px) sa new nav bar */}
+                <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20">
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         <StatCard title="Total Students" value={stats.totalStudents} icon={Users} isLoading={loadingStats} />
                         <StatCard title="Active Activities" value={stats.activeActivities} icon={Activity} isLoading={loadingStats} />
@@ -193,7 +256,13 @@ export default function DashboardPage() {
                             <p className="text-slate-500">Placeholder for recent student attendance logs...</p>
                         </div>
                     </div>
+
+                    {/* --- MOBILE-ONLY FOOTER GIKUHA NA DIRI --- */}
+                
                 </main>
+
+                {/* --- NEW BOTTOM NAV BAR ADDED --- */}
+                <BottomNavBar />
             </div>
         </div>
     );

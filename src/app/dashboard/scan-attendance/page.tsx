@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabaseClient';
 import { Html5Qrcode } from 'html5-qrcode';
 import Swal from 'sweetalert2';
 import {
-    LayoutDashboard, Users, ClipboardList, QrCode, LogOut, Menu, X, UserCheck, Search, Camera, CameraOff,
-    CheckCircle, AlertTriangle as WarningIcon, XCircle, Clock
+    LayoutDashboard, Users, ClipboardList, QrCode, LogOut, UserCheck, Search, Camera, CameraOff,
+    CheckCircle, AlertTriangle as WarningIcon, XCircle, Clock,
+    Activity // Gidugang ang Activity icon
 } from 'lucide-react';
 
 type ActivitySchedule = {
@@ -43,9 +44,11 @@ type AttendanceRecord = Student & {
     statusType: 'success' | 'error' | 'warning';
 };
 
+// --- GI-UPDATE ANG DESKTOP NAVLINK LOGIC ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
-    const isActive = pathname.startsWith(href);
+    // Gi-ayo ang logic para mo-handle og prefix matching
+    const isActive = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
     return (
         <Link
         href={href}
@@ -91,6 +94,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
                 <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
                 <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
                 <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
+                <NavLink href="/dashboard/collection" icon={Activity}>Collection</NavLink>
             </nav>
         </div>
         <div className="mt-auto p-4 border-t dark:border-slate-800">
@@ -101,6 +105,60 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
         <div className="pb-4 text-center px-4"> <p className="text-xs text-slate-500 dark:text-slate-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
     </div>
 );
+
+// --- GIDUGANG NGA COMPONENT ---
+const BottomNavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
+    const pathname = usePathname();
+    const isActive = href === "/dashboard" 
+        ? pathname === href 
+        : href !== "/" && pathname.startsWith(href);
+    
+    return (
+        <Link
+            href={href}
+            className={`flex flex-col items-center justify-center gap-1 p-2 transition-colors ${
+                isActive ? 'text-red-600' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+        >
+            <Icon className="h-6 w-6" />
+            <span className="text-xs font-medium">{children}</span>
+        </Link>
+    );
+};
+
+// --- GIDUGANG NGA COMPONENT ---
+const BottomNavBar = () => {
+    return (
+        <nav className="fixed bottom-0 left-0 right-0 z-20 h-20 border-t bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.06)] md:hidden dark:bg-slate-900 dark:border-slate-800">
+            
+            <div className="mx-auto grid h-16 max-w-lg grid-cols-5 items-center px-2">
+                <BottomNavLink href="/dashboard" icon={LayoutDashboard}>Home</BottomNavLink>
+                <BottomNavLink href="/dashboard/student-list" icon={Users}>Students</BottomNavLink>
+                
+                <div className="flex justify-center">
+                    <Link
+                        href="/dashboard/scan-attendance"
+                        className="flex flex-col h-16 w-16 -mt-6 items-center justify-center rounded-full bg-red-600 text-white shadow-lg"
+                        aria-label="Scan QR Code"
+                    >
+                        <QrCode className="h-7 w-7" />
+                        <span className="text-sm font-medium">Scan</span>
+                    </Link>
+                </div>
+                
+                <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
+                <BottomNavLink href="/dashboard/collection" icon={Activity}>Collection</BottomNavLink>
+            </div>
+
+            <div className="text-center pb-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Developed by: <strong>Christian B. Maglangit</strong>
+                </p>
+            </div>
+        </nav>
+    );
+};
+
 
 const AttendanceLogItem = ({ record }: { record: AttendanceRecord }) => {
     const statusInfo = {
@@ -126,7 +184,7 @@ const AttendanceLogItem = ({ record }: { record: AttendanceRecord }) => {
 };
 
 export default function ScanAttendancePage() {
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    // --- GIKUHA ANG 'isSidebarOpen' STATE ---
     const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
     const [allActivities, setAllActivities] = useState<Activity[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -150,30 +208,58 @@ export default function ScanAttendancePage() {
 
             const determineAttendanceStatus = (activity: Activity): { status: string, type: 'success' | 'warning' | 'error' } => {
                 const now = new Date();
+                // Get today's date string in YYYY-MM-DD format, considering local timezone offset might be needed depending on server/client config
+                // Using a simpler approach for now, assuming client's date is relevant. For robustness, consider UTC.
                 const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-                const todaySchedule = activity.activity_schedules.find(s => s.date === todayStr);
-                
-                if (!todaySchedule) return { status: "No schedule for today", type: 'error' };
-                
-                const parseTime = (timeStr: string) => {
-                    const [hours, minutes] = timeStr.split(':').map(Number);
-                    const date = new Date(now);
-                    date.setHours(hours, minutes, 0, 0);
-                    return date;
-                };
-                
-                const gracePeriod = 120 * 60000; 
-                const amIn = parseTime(todaySchedule.am_in);
-                const amOut = parseTime(todaySchedule.am_out);
-                const pmIn = parseTime(todaySchedule.pm_in);
-                const pmOut = parseTime(todaySchedule.pm_out);
 
-                if (now >= amIn && now < new Date(amIn.getTime() + gracePeriod)) return { status: 'Time In (AM)', type: 'success' };
-                if (now >= amOut && now < new Date(amOut.getTime() + gracePeriod)) return { status: 'Time Out (AM)', type: 'success' };
-                if (now >= pmIn && now < new Date(pmIn.getTime() + gracePeriod)) return { status: 'Time In (PM)', type: 'success' };
-                if (now >= pmOut && now < new Date(pmOut.getTime() + gracePeriod)) return { status: 'Time Out (PM)', type: 'success' };
-                
-                return { status: 'Out of schedule bounds', type: 'warning' };
+                const todaySchedule = activity.activity_schedules.find(s => s.date === todayStr);
+
+                if (!todaySchedule) {
+                    return { status: "No schedule defined for today", type: 'error' };
+                }
+
+                // Helper to parse time string into a Date object for today
+                const parseTime = (timeStr: string | null): Date | null => {
+                    if (!timeStr) return null; // Return null if time string is null or empty
+                    try {
+                        const [hours, minutes] = timeStr.split(':').map(Number);
+                        if (isNaN(hours) || isNaN(minutes)) return null; // Return null if parsing fails
+                        const date = new Date(now); // Use current date as base
+                        date.setHours(hours, minutes, 0, 0); // Set hours and minutes for today
+                        return date;
+                    } catch (e) {
+                        console.error("Error parsing time string:", timeStr, e);
+                        return null; // Return null on error
+                    }
+                };
+
+                const gracePeriod = 120 * 60000; // 120 minutes in milliseconds
+
+                // Parse schedule times, results can be Date objects or null
+                const amInTime = parseTime(todaySchedule.am_in);
+                const amOutTime = parseTime(todaySchedule.am_out);
+                const pmInTime = parseTime(todaySchedule.pm_in);
+                const pmOutTime = parseTime(todaySchedule.pm_out);
+
+                // Check AM In
+                if (amInTime && now >= amInTime && now < new Date(amInTime.getTime() + gracePeriod)) {
+                    return { status: 'Time In (AM)', type: 'success' };
+                }
+                // Check AM Out
+                if (amOutTime && now >= amOutTime && now < new Date(amOutTime.getTime() + gracePeriod)) {
+                     return { status: 'Time Out (AM)', type: 'success' };
+                }
+                // Check PM In
+                if (pmInTime && now >= pmInTime && now < new Date(pmInTime.getTime() + gracePeriod)) {
+                    return { status: 'Time In (PM)', type: 'success' };
+                }
+                // Check PM Out
+                if (pmOutTime && now >= pmOutTime && now < new Date(pmOutTime.getTime() + gracePeriod)) {
+                    return { status: 'Time Out (PM)', type: 'success' };
+                }
+
+                // If none of the above matched, it's out of bounds
+                return { status: 'Outside scannable time window', type: 'warning' };
             };
 
             const processScan = async (decodedText: string) => {
@@ -332,45 +418,55 @@ export default function ScanAttendancePage() {
                 <SidebarContent onLogout={handleLogout} />
             </div>
 
-            <div className={`fixed inset-0 z-30 bg-black/60 transition-opacity duration-300 md:hidden ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setSidebarOpen(false)}></div>
-            <div className={`fixed top-0 left-0 h-full w-[280px] border-r bg-white dark:bg-slate-900 dark:border-slate-800 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <SidebarContent onLogout={handleLogout} />
-            </div>
+            {/* --- GIKUHA ANG MOBILE SIDEBAR/DRAWER NGA CODE --- */}
 
             <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+                
+                {/* --- GI-UPDATE ANG HEADER --- */}
                 <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
-                    <button className="md:hidden" onClick={() => setSidebarOpen(!isSidebarOpen)}>
-                        {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                    </button>
-                    <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Scan Attendance</h1>
+                    {/* Gikuha ang Hamburger Button */}
+                    <div className="w-full flex-1 flex items-center justify-between">
+                        <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
+                           Student Activity Attendance
+                        </h1>
+                         {/* Gidugang ang Logout Button */}
+                         <button
+                            onClick={handleLogout}
+                            className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50"
+                            aria-label="Logout"
+                        >
+                            <LogOut className="h-5 w-5" />
+                        </button>
+                    </div>
                 </header>
 
-                <main className={`flex-1 overflow-y-auto p-4 lg:p-6`}>
+                {/* --- GI-UPDATE ANG MAIN (gidugang ang pb-20) --- */}
+                <main className={`flex-1 overflow-y-auto p-4 lg:p-6 pb-20`}>
                     <div className="grid lg:grid-cols-3 gap-6 items-start">
                         <div className="p-6 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-4 lg:col-span-2">
-                             <div className="flex justify-between items-center gap-4">
-                                 <div className="relative flex-grow">
-                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                     <input
-                                         id="activity-search"
-                                         type="text"
-                                         value={searchQuery}
-                                         onChange={(e) => { setSearchQuery(e.target.value); if (selectedActivity) { setSelectedActivity(null); setCameraOn(false); } }}
-                                         placeholder="Search for an activity..."
-                                         className="w-full pl-10 pr-4 py-2 bg-transparent border border-slate-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
-                                     />
-                                     {suggestions.length > 0 && (
-                                         <ul className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto dark:bg-slate-800 dark:border-slate-600">
-                                             {suggestions.map(activity => (
-                                                 <li key={activity.id} onClick={() => handleSelectActivity(activity)} className="px-4 py-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700">{activity.name}</li>
-                                             ))}
-                                         </ul>
-                                     )}
-                                 </div>
-                                 {currentDateTime && (
+                            <div className="flex justify-between items-center gap-4">
+                                <div className="relative flex-grow">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                    <input
+                                        id="activity-search"
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => { setSearchQuery(e.target.value); if (selectedActivity) { setSelectedActivity(null); setCameraOn(false); } }}
+                                        placeholder="Search for an activity..."
+                                        className="w-full pl-10 pr-4 py-2 bg-transparent border border-slate-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                                    />
+                                    {suggestions.length > 0 && (
+                                        <ul className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto dark:bg-slate-800 dark:border-slate-600">
+                                            {suggestions.map(activity => (
+                                                <li key={activity.id} onClick={() => handleSelectActivity(activity)} className="px-4 py-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700">{activity.name}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                                {currentDateTime && (
                                     <p className="text-sm font-medium text-green-600 dark:text-green-400 flex-shrink-0">{currentDateTime.toLocaleTimeString()}</p>
-                                 )}
-                             </div>
+                                )}
+                            </div>
                             
                             <div className="w-full aspect-square lg:h-[500px] dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
                                 {/* This is where the scanner view will be injected */}
@@ -391,26 +487,29 @@ export default function ScanAttendancePage() {
                         </div>
 
                         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 h-full flex flex-col max-h-[720px] lg:max-h-[724px]">
-                           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
+                            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100">Live Attendance Feed</h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">Showing {scannedStudents.length} record(s)</p>
-                           </div>
-                           <div className="flex-1 overflow-y-auto">
-                               {scannedStudents.length > 0 ? (
-                                       scannedStudents.map((student, index) => (
-                                           <AttendanceLogItem key={`${student.student_id}-${index}`} record={student} />
-                                       ))
-                                   ) : (
-                                       <div className="flex flex-col items-center justify-center text-center p-10 h-full">
-                                            <QrCode className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                                            <p className="font-semibold text-slate-600 dark:text-slate-300">Waiting for scans...</p>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400">Scanned students will appear here in real-time.</p>
-                                       </div>
-                               )}
-                           </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                {scannedStudents.length > 0 ? (
+                                    scannedStudents.map((student, index) => (
+                                        <AttendanceLogItem key={`${student.student_id}-${index}`} record={student} />
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center text-center p-10 h-full">
+                                        <QrCode className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                                        <p className="font-semibold text-slate-600 dark:text-slate-300">Waiting for scans...</p>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Scanned students will appear here in real-time.</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </main>
+
+                {/* --- GIDUGANG ANG BOTTOM NAV BAR --- */}
+                <BottomNavBar />
             </div>
         </div>
     );

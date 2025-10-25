@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import {
-    LayoutDashboard, Users, ClipboardList, QrCode, LogOut, Menu, X, UserCheck, Download, UserPlus, Edit, Trash2, Search, Archive, AlertTriangle, UserX, Calendar, MoreHorizontal
+    LayoutDashboard, Users, ClipboardList, QrCode, LogOut, X, UserCheck, Download, UserPlus, Edit, Trash2, Search, Archive, AlertTriangle, UserX, MoreHorizontal,
+    Activity // Gidugang ang Activity icon
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng } from 'html-to-image';
@@ -26,9 +27,11 @@ type Student = {
 
 type StudentFormData = Omit<Student, 'created_at' | 'user_id'>;
 
+// --- GI-UPDATE ANG DESKTOP NAVLINK LOGIC ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
-    const isActive = pathname === href;
+    // Gi-ayo ang logic para mo-handle og prefix matching (e.g., /dashboard/student-list/edit)
+    const isActive = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
     return (
         <Link
             href={href}
@@ -79,7 +82,7 @@ const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: st
                     {label}
                 </label>
             )}
-             {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />}
+            {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />}
             <input
                 id={id}
                 className={`w-full py-2 bg-transparent border border-slate-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 dark:bg-slate-700 dark:border-slate-600 dark:text-white ${hasIcon ? 'pl-10 pr-4' : 'px-4'} ${className}`}
@@ -163,6 +166,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => Promise<void> }) => (
                 <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
                 <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
                 <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
+                <NavLink href="/dashboard/collection" icon={Activity}>Collection</NavLink>
             </nav>
         </div>
         <div className="mt-auto p-4 border-t dark:border-slate-800">
@@ -173,9 +177,62 @@ const SidebarContent = ({ onLogout }: { onLogout: () => Promise<void> }) => (
                 <LogOut className="h-5 w-5" /> Logout
             </button>
         </div>
-         <div className="pb-4 text-center px-4"> <p className="text-xs text-slate-500 dark:text-slate-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
+        <div className="pb-4 text-center px-4"> <p className="text-xs text-slate-500 dark:text-slate-400"> Developed by: <strong>Christian B. Maglangit</strong> </p> </div>
     </div>
 );
+
+// --- GIDUGANG NGA COMPONENT ---
+const BottomNavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
+    const pathname = usePathname();
+    const isActive = href === "/dashboard" 
+        ? pathname === href 
+        : href !== "/" && pathname.startsWith(href);
+    
+    return (
+        <Link
+            href={href}
+            className={`flex flex-col items-center justify-center gap-1 p-2 transition-colors ${
+                isActive ? 'text-red-600' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+        >
+            <Icon className="h-6 w-6" />
+            <span className="text-xs font-medium">{children}</span>
+        </Link>
+    );
+};
+
+// --- GIDUGANG NGA COMPONENT ---
+const BottomNavBar = () => {
+    return (
+        <nav className="fixed bottom-0 left-0 right-0 z-20 h-20 border-t bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.06)] md:hidden dark:bg-slate-900 dark:border-slate-800">
+            
+            <div className="mx-auto grid h-16 max-w-lg grid-cols-5 items-center px-2">
+                <BottomNavLink href="/dashboard" icon={LayoutDashboard}>Home</BottomNavLink>
+                <BottomNavLink href="/dashboard/student-list" icon={Users}>Students</BottomNavLink>
+                
+                <div className="flex justify-center">
+                    <Link
+                        href="/dashboard/scan-attendance"
+                        className="flex flex-col h-16 w-16 -mt-6 items-center justify-center rounded-full bg-red-600 text-white shadow-lg"
+                        aria-label="Scan QR Code"
+                    >
+                        <QrCode className="h-7 w-7" />
+                        <span className="text-sm font-medium">Scan</span>
+                    </Link>
+                </div>
+                
+                <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
+                <BottomNavLink href="/dashboard/collection" icon={Activity}>Collection</BottomNavLink>
+            </div>
+
+            <div className="text-center pb-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Developed by: <strong>Christian B. Maglangit</strong>
+                </p>
+            </div>
+        </nav>
+    );
+};
 
 
 const StudentListItem = ({ student, onQr, onEdit, onDelete, index }: { student: Student, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number }) => (
@@ -188,13 +245,13 @@ const StudentListItem = ({ student, onQr, onEdit, onDelete, index }: { student: 
         <td className="px-6 py-4 hidden md:table-cell">{student.course}</td>
         <td className="px-6 py-4 hidden lg:table-cell">{student.year_level}</td>
         <td className="px-6 py-4">
-            <div className="flex justify-center items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex justify-center items-center gap-1">
                 <button onClick={onQr} className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><QrCode size={18} /></button>
                 <button onClick={onEdit} className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><Edit size={18} /></button>
                 <button onClick={onDelete} className="p-2 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-slate-800"><Trash2 size={18} /></button>
             </div>
             <div className="flex justify-center md:hidden group-hover:opacity-0">
-                 <MoreHorizontal size={20} className="text-slate-400" />
+                <MoreHorizontal size={20} className="text-slate-400" />
             </div>
         </td>
     </tr>
@@ -225,7 +282,7 @@ const ListItemSkeleton = () => (
 
 
 export default function StudentListPage() {
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    // --- GIKUHA ANG 'isSidebarOpen' STATE ---
     const [students, setStudents] = useState<Student[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
@@ -250,61 +307,61 @@ export default function StudentListPage() {
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     useEffect(() => {
-    const fetchUser = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) setUserEmail(user.email || null);
+        const fetchUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) setUserEmail(user.email || null);
+        };
+        fetchUser();
+    }, []);
+
+
+    const handleSecureAction = (action: () => void) => {
+        setPendingAction(() => action); 
+        setIsPasswordModalOpen(true);     
+        setPasswordError(null);         
     };
-    fetchUser();
-}, []);
 
-
-const handleSecureAction = (action: () => void) => {
-    setPendingAction(() => action); 
-    setIsPasswordModalOpen(true);     
-    setPasswordError(null);          
-};
-
-const handleConfirmPassword = async (combinedPassword: string) => {
-    if (!userEmail) {
-        setPasswordError("Could not find user info. Please log in again.");
-        return;
-    }
-    setIsVerifyingPassword(true);
-    setPasswordError(null);
-    const MASTER_PASSWORD = 'admin20';
-
-    if (!combinedPassword.startsWith(MASTER_PASSWORD)) {
-        setPasswordError("Incorrect security password format.");
-        setIsVerifyingPassword(false);
-        return;
-    }
-
-    const userPasswordPart = combinedPassword.slice(MASTER_PASSWORD.length);
-    
-    if (!userPasswordPart) {
-        setPasswordError("Please enter your user password after 'admin2000'.");
-        setIsVerifyingPassword(false);
-        return;
-    }
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: userPasswordPart, 
-    });
-    
-    if (signInError) {
-        setPasswordError("Incorrect user password.");
-        setIsVerifyingPassword(false);
-    } else {
-       
-        setIsPasswordModalOpen(false); 
-        if (pendingAction) {
-            pendingAction(); 
+    const handleConfirmPassword = async (combinedPassword: string) => {
+        if (!userEmail) {
+            setPasswordError("Could not find user info. Please log in again.");
+            return;
         }
-        setPendingAction(null); 
-        setIsVerifyingPassword(false);
-    }
-};
+        setIsVerifyingPassword(true);
+        setPasswordError(null);
+        const MASTER_PASSWORD = 'admin20';
+
+        if (!combinedPassword.startsWith(MASTER_PASSWORD)) {
+            setPasswordError("Incorrect security password format.");
+            setIsVerifyingPassword(false);
+            return;
+        }
+
+        const userPasswordPart = combinedPassword.slice(MASTER_PASSWORD.length);
+        
+        if (!userPasswordPart) {
+            setPasswordError("Please enter your user password after 'admin2000'.");
+            setIsVerifyingPassword(false);
+            return;
+        }
+
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: userEmail,
+            password: userPasswordPart, 
+        });
+        
+        if (signInError) {
+            setPasswordError("Incorrect user password.");
+            setIsVerifyingPassword(false);
+        } else {
+            
+            setIsPasswordModalOpen(false); 
+            if (pendingAction) {
+                pendingAction(); 
+            }
+            setPendingAction(null); 
+            setIsVerifyingPassword(false);
+        }
+    };
     const fetchStudents = useCallback(async () => {
         setLoading(true);
         const { data, error } = await supabase
@@ -390,21 +447,31 @@ const handleConfirmPassword = async (combinedPassword: string) => {
                     <SidebarContent onLogout={handleLogout} />
                 </div>
                 
-                 <div className={`fixed inset-0 bg-black/60 z-30 transition-opacity duration-300 md:hidden ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setSidebarOpen(false)}></div>
-                <div className={`fixed top-0 left-0 h-full w-[280px] border-r bg-white dark:bg-slate-900 dark:border-slate-800 z-40 transform transition-transform duration-300 ease-in-out md:hidden ${ isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                    <SidebarContent onLogout={handleLogout} />
-                </div>
+                {/* --- GIKUHA ANG MOBILE SIDEBAR/DRAWER NGA CODE --- */}
 
                 <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+                    
+                    {/* --- GI-UPDATE ANG HEADER --- */}
                     <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
-                        <button className="md:hidden" onClick={() => setSidebarOpen(!isSidebarOpen)}>
-                            {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                        </button>
-                        <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Students List</h1>
+                        {/* Gikuha ang Hamburger Button */}
+                        <div className="w-full flex-1 flex items-center justify-between">
+                            <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
+                                Student Activity Attendance
+                            </h1>
+                            {/* Gidugang ang Logout Button */}
+                            <button
+                                onClick={handleLogout}
+                                className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50"
+                                aria-label="Logout"
+                            >
+                                <LogOut className="h-5 w-5" />
+                            </button>
+                        </div>
                     </header>
                     
-                    <main className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-filter duration-300 ${isModalActive ? 'blur-sm' : ''}`}>
-                         <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
+                    {/* --- GI-UPDATE ANG MAIN (gidugang ang pb-20) --- */}
+                    <main className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-filter duration-300 ${isModalActive ? 'blur-sm' : ''} pb-20`}>
+                        <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
                             <div className="w-full sm:w-auto sm:flex-1">
                                 <Input
                                     id="search-id"
@@ -418,7 +485,7 @@ const handleConfirmPassword = async (combinedPassword: string) => {
                                 />
                             </div>
                             <div className="flex items-center gap-2 w-full sm:w-auto">
-                                 <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting}>
+                                <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting}>
                                     <Archive size={16} className="mr-2" />
                                     <span>{isExporting ? 'Exporting...' : 'QRs'}</span>
                                 </Button>
@@ -434,19 +501,19 @@ const handleConfirmPassword = async (combinedPassword: string) => {
                         </div>
                         
                         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                           <div className="overflow-x-auto">
-                               <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
-                                   <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
-                                       <tr>
-                                           <th scope="col" className="px-6 py-3 w-12">#</th>
-                                           <th scope="col" className="px-6 py-3">Full Name</th>
-                                           <th scope="col" className="px-6 py-3 hidden sm:table-cell">ID Number</th>
-                                           <th scope="col" className="px-6 py-3 hidden md:table-cell">Course</th>
-                                           <th scope="col" className="px-6 py-3 hidden lg:table-cell">Year</th>
-                                           <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                       </tr>
-                                   </thead>
-                                   <tbody>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
+                                    <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3 w-12">#</th>
+                                            <th scope="col" className="px-6 py-3">Full Name</th>
+                                            <th scope="col" className="px-6 py-3 hidden sm:table-cell">ID Number</th>
+                                            <th scope="col" className="px-6 py-3 hidden md:table-cell">Course</th>
+                                            <th scope="col" className="px-6 py-3 hidden lg:table-cell">Year</th>
+                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                     {loading ? (
                                         Array.from({ length: 7 }).map((_, i) => <ListItemSkeleton key={i} />)
                                     ) : filteredStudents.length > 0 ? (
@@ -465,20 +532,23 @@ const handleConfirmPassword = async (combinedPassword: string) => {
                                         <tr>
                                             <td colSpan={6} className="text-center p-10">
                                                 <div className="flex flex-col items-center gap-4">
-                                                   <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
+                                                    <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
                                                         <UserX className="h-10 w-10 text-slate-500" />
-                                                   </div>
-                                                   <p className="mt-4 font-semibold text-slate-700 dark:text-slate-200">{searchQuery ? 'No Students Match Your Search' : 'No Students Found'}</p>
-                                                   <p className="text-slate-500 dark:text-slate-400 text-sm">Add a new student to get started.</p>
+                                                    </div>
+                                                    <p className="mt-4 font-semibold text-slate-700 dark:text-slate-200">{searchQuery ? 'No Students Match Your Search' : 'No Students Found'}</p>
+                                                    <p className="text-slate-500 dark:text-slate-400 text-sm">Add a new student to get started.</p>
                                                 </div>
                                             </td>
                                         </tr>
                                     )}
-                                   </tbody>
-                               </table>
-                           </div>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </main>
+
+                    {/* --- GIDUGANG ANG BOTTOM NAV BAR --- */}
+                    <BottomNavBar />
                 </div>
             </div>
 
@@ -524,13 +594,13 @@ const handleConfirmPassword = async (combinedPassword: string) => {
                 </>
             )}
             {isPasswordModalOpen && (
-            <PasswordConfirmationModal
-                onConfirm={handleConfirmPassword}
-                onClose={() => setIsPasswordModalOpen(false)}
-                loading={isVerifyingPassword}
-                error={passwordError}
-            />
-        )}
+                <PasswordConfirmationModal
+                    onConfirm={handleConfirmPassword}
+                    onClose={() => setIsPasswordModalOpen(false)}
+                    loading={isVerifyingPassword}
+                    error={passwordError}
+                />
+            )}
         </>
     );
 }
