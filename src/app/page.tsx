@@ -86,7 +86,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
         setMessage(`Error: ${error.message}`);
       } else {
         onClose();
-        router.refresh();
+        router.push('/dashboard');
       }
     } catch (error) {
       setMessage('An unexpected error occurred. Please try again.');
@@ -155,7 +155,7 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLo
           setMessage(`Account created but failed to save profile: ${insertError.message}`);
         } else {
           onClose();
-          router.refresh();
+          router.push('/dashboard');
         }
       }
     } catch (error) {
