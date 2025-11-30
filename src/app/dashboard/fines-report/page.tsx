@@ -352,73 +352,78 @@ export default function ActivityReportPage() {
 
 
     const handleGeneratePDF = () => {
-        setIsGeneratingReport(true);
-        try {
-            const doc = new jsPDF({ orientation: 'landscape' });
-            const pageWidth = doc.internal.pageSize.getWidth();
-            
-            doc.setFontSize(16); doc.text("Student Activity Report", pageWidth / 2, 20, { align: 'center' });
-            doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 28, { align: 'center' });
+    setIsGeneratingReport(true);
+    try {
+        const doc = new jsPDF({ orientation: 'landscape' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        
+        doc.setFontSize(16); doc.text("Student Activity Report", pageWidth / 2, 20, { align: 'center' });
+        doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 28, { align: 'center' });
 
-            // Define Headers
-            const headRow1 = [
-                { 
-                    content: 'ID Number', 
-                    rowSpan: 2, 
-                    styles: { valign: 'middle' as 'middle', halign: 'center' as 'center' } 
-                },
-                { 
-                    content: 'Name', 
-                    rowSpan: 2, 
-                    styles: { valign: 'middle' as 'middle', halign: 'center' as 'center' } 
-                },
-                ...activities.map(act => ({ 
-                    content: `${act.name}\n(${act.activity_type.toUpperCase().replace('_', ' ')})`, 
-                    colSpan: 1, 
-                    styles: { halign: 'center' as 'center' } 
-                })),
-                { 
-                    content: 'Total Fines', 
-                    rowSpan: 2, 
-                    styles: { valign: 'middle' as 'middle', halign: 'center' as 'center' } 
-                }
+        // Define Headers
+        const headRow1 = [
+            { 
+                content: 'ID Number', 
+                rowSpan: 2, 
+                // FIX: Use 'as const' instead of 'as "middle"'
+                styles: { valign: 'middle' as const, halign: 'center' as const } 
+            },
+            { 
+                content: 'Name', 
+                rowSpan: 2, 
+                // FIX: Use 'as const'
+                styles: { valign: 'middle' as const, halign: 'center' as const } 
+            },
+            ...activities.map(act => ({ 
+                content: `${act.name}\n(${act.activity_type.toUpperCase().replace('_', ' ')})`, 
+                colSpan: 1, 
+                // FIX: Use 'as const'
+                styles: { halign: 'center' as const } 
+            })),
+            { 
+                content: 'Total Fines', 
+                rowSpan: 2, 
+                // FIX: Use 'as const'
+                styles: { valign: 'middle' as const, halign: 'center' as const } 
+            }
+        ];
+
+        const headRow2 = activities.map(() => ({ 
+            content: 'STATUS', 
+            // FIX: Use 'as const'
+            styles: { halign: 'center' as const, fontSize: 8 } 
+        }));
+
+        const bodyData = studentActivitySummaries.map(student => {
+            const row: (string | number)[] = [
+                student.student_id,
+                student.full_name,
             ];
-
-            const headRow2 = activities.map(() => ({ 
-                content: 'STATUS', 
-                styles: { halign: 'center' as 'center', fontSize: 8 } 
-            }));
-
-            const bodyData = studentActivitySummaries.map(student => {
-                const row = [
-                    student.student_id,
-                    student.full_name,
-                ];
-                activities.forEach(act => {
-                    const data = student.activities.get(act.id);
-                    row.push(data?.statusString || "0/0");
-                });
-                row.push(`P ${student.total_fines}`);
-                return row;
+            activities.forEach(act => {
+                const data = student.activities.get(act.id);
+                row.push(data?.statusString || "0/0");
             });
+            row.push(`P ${student.total_fines}`);
+            return row;
+        });
 
-            autoTable(doc, {
-                head: [headRow1, headRow2],
-                body: bodyData,
-                startY: 35,
-                theme: 'grid',
-                headStyles: { fillColor: [22, 160, 133], textColor: 255, lineColor: 200, lineWidth: 0.1 },
-                styles: { lineColor: 200, lineWidth: 0.1 }, 
-            });
+        autoTable(doc, {
+            head: [headRow1, headRow2],
+            body: bodyData,
+            startY: 35,
+            theme: 'grid',
+            headStyles: { fillColor: [22, 160, 133], textColor: 255, lineColor: 200, lineWidth: 0.1 },
+            styles: { lineColor: 200, lineWidth: 0.1 }, 
+        });
 
-            doc.save('Activity_Report.pdf');
-        } catch (e) {
-            console.error(e);
-            alert("Error generating PDF");
-        } finally {
-            setIsGeneratingReport(false);
-        }
-    };
+        doc.save('Activity_Report.pdf');
+    } catch (e) {
+        console.error(e);
+        alert("Error generating PDF");
+    } finally {
+        setIsGeneratingReport(false);
+    }
+};
 
     return (
         <div className={`grid h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
