@@ -166,7 +166,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => Promise<void> }) => (
                 <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
                 <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
                 <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
-                <NavLink href="/dashboard/collection" icon={Activity}>Collection</NavLink>
+                <NavLink href="/dashboard/fines-report" icon={Activity}>Fines Report</NavLink>
             </nav>
         </div>
         <div className="mt-auto p-4 border-t dark:border-slate-800">
@@ -222,7 +222,7 @@ const BottomNavBar = () => {
                 </div>
                 
                 <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
-                <BottomNavLink href="/dashboard/collection" icon={Activity}>Collection</BottomNavLink>
+                <BottomNavLink href="/dashboard/fines-report" icon={Activity}>Fines</BottomNavLink>
             </div>
 
             <div className="text-center pb-1">
