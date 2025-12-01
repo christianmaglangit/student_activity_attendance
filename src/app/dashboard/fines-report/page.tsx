@@ -158,6 +158,11 @@ const BottomNavBar = () => {
                 <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
                 <BottomNavLink href="/dashboard/fines-report" icon={ActivityIcon}>Fines</BottomNavLink>
             </div>
+            <div className="text-center pb-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Developed by: <strong>Christian B. Maglangit</strong>
+                </p>
+            </div>
         </nav>
     );
 };
