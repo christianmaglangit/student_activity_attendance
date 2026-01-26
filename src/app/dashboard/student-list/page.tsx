@@ -438,7 +438,7 @@ export default function StudentListPage() {
                     <div ref={hiddenQrRef} className="bg-white p-6 rounded-lg text-center items-center">
                         <QRCodeCanvas className="mx-auto flex justify-center" value={JSON.stringify({ student_id: qrToRender.student_id })} size={256} />
                         <p className="font-bold text-lg mt-4 text-black">{qrToRender.full_name}</p>
-                        <p className="text-sm text-slate-600">{qrToRender.student_id}</p>
+                        <p className="text-xs text-slate-500">Developed by: Christian B. Maglangit</p>
                     </div>
                 )}
             </div>
@@ -573,7 +573,7 @@ export default function StudentListPage() {
                             <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center">
                                 <QRCodeCanvas value={JSON.stringify({ student_id: modalState.student.student_id })} size={200} className="mx-auto flex justify-center" />
                                 <p className="font-bold text-lg mt-4 text-black">{modalState.student.full_name}</p>
-                                <p className="text-sm text-slate-600">{modalState.student.student_id}</p>
+                                <p className="text-xs text-slate-500">Developed by: Christian B. Maglangit</p>
                             </div>
                             <Button onClick={handleDownloadQr} className="w-auto flex items-center gap-2"><Download size={20} /> Download</Button>
                         </div>
