@@ -259,7 +259,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen
           <div className="flex items-center gap-2 sm:gap-3">
             <UserCheck className="w-7 h-7 sm:w-8 sm:h-8 text-green-600" />
             <h1 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-white">
-              Student Activity Attendance
+              Attendance Portal
             </h1>
           </div>
           <div className="hidden md:flex items-center gap-2 sm:gap-4">
@@ -321,7 +321,7 @@ export default function HomePage() {
           <div className="max-w-3xl py-16">
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-gray-900 dark:text-black">
               The Smart Way to Track{' '}
-              <span className="text-green-600 dark:text-green-400">Student Activity</span>
+              <span className="text-green-600 dark:text-green-400">Activity Attendance</span>
             </h2>
             <p className="mt-6 text-base md:text-lg text-gray-600 dark:text-gray-800">
               Simplify attendance tracking, reduce administrative tasks, and gain valuable insights with our seamless, modern platform.

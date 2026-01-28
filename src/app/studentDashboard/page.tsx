@@ -253,7 +253,7 @@ export default function StudentDashboard() {
                     <div className="flex items-center gap-2">
                         <UserCheck className="h-6 w-6 text-green-600" />
                         <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
-                            Student Attendance Portal
+                            Attendance Portal
                         </h1>
                     </div>
                     

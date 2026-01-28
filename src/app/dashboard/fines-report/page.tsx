@@ -120,7 +120,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => {
             <div className="flex h-16 items-center border-b px-4 lg:px-6 dark:border-slate-800">
                 <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
                     <UserCheck className="h-6 w-6 text-green-600" />
-                    <span className="text-slate-800 dark:text-white">Student Activity Attendance</span>
+                    <span className="text-slate-800 dark:text-white">Attendance Portal</span>
                 </Link>
             </div>
             <div className="flex-1 py-2">
@@ -362,7 +362,7 @@ export default function ActivityReportPage() {
         const doc = new jsPDF({ orientation: 'landscape' });
         const pageWidth = doc.internal.pageSize.getWidth();
         
-        doc.setFontSize(16); doc.text("Student Activity Report", pageWidth / 2, 20, { align: 'center' });
+        doc.setFontSize(16); doc.text("Attendance Activity Report", pageWidth / 2, 20, { align: 'center' });
         doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 28, { align: 'center' });
 
         // Define Headers

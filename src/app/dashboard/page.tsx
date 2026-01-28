@@ -68,7 +68,7 @@ const SidebarContent = () => {
             <div className="flex h-16 shrink-0 items-center border-b px-4 lg:px-6 dark:border-slate-800">
                 <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
                     <UserCheck className="h-6 w-6 text-green-600" />
-                    <span className="text-slate-800 dark:text-white">Student Activity Attendance</span>
+                    <span className="text-slate-800 dark:text-white">Attendance Portal</span>
                 </Link>
             </div>
             <div className="flex-1 py-4">
@@ -228,7 +228,7 @@ export default function DashboardPage() {
                                         
                     <div className="w-full flex-1 flex items-center justify-between">
                         <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
-                            Student Activity Attendance {/* Title Updated */}
+                            Attendance Portal {/* Title Updated */}
                         </h1>
                         {/* Logout Button Added */}
                         <button
@@ -253,7 +253,7 @@ export default function DashboardPage() {
                     <div className="mt-8 bg-white p-6 rounded-xl shadow-sm border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
                         <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Recent Activity</h2>
                         <div className="flex items-center justify-center h-48 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                            <p className="text-slate-500">Placeholder for recent student attendance logs...</p>
+                            <p className="text-slate-500">Placeholder for recent attendance logs...</p>
                         </div>
                     </div>
 

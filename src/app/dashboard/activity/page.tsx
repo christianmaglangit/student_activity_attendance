@@ -120,7 +120,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => {
             <div className="flex h-16 items-center border-b px-4 lg:px-6 dark:border-slate-800">
                 <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
                     <UserCheck className="h-6 w-6 text-green-600" />
-                    <span className="text-slate-800 dark:text-white">Student Activity Attendance</span>
+                    <span className="text-slate-800 dark:text-white">Attendance Portal</span>
                 </Link>
             </div>
             <div className="flex-1 py-2">
@@ -735,7 +735,7 @@ export default function ActivityPage() {
                 <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
                     <div className="w-full flex-1 flex items-center justify-between">
                         <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
-                            Student Activity Attendance
+                            Attendance Portal
                         </h1>
                         <button
                             onClick={handleLogout}
