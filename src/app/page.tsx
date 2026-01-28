@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UserCheck, X, Menu } from 'lucide-react';
+import { UserCheck, X, Menu, Eye, EyeOff } from 'lucide-react'; // Added Eye and EyeOff
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -27,18 +27,41 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
 }
 
-const Input: React.FC<InputProps> = ({ label, id, ...props }) => {
+// --- UPDATED INPUT COMPONENT ---
+// Now handles Password Visibility Toggling internally
+const Input: React.FC<InputProps> = ({ label, id, type, ...props }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Check if this input is meant to be a password field
+  const isPassword = type === 'password';
+  
+  // Determine the actual type to render (text if showing password, otherwise original type)
+  const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
+
   return (
     <div>
       <label htmlFor={id} className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
         {label}
       </label>
-      <input
-        id={id}
-        className="w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        {...props}
-        suppressHydrationWarning
-      />
+      <div className="relative">
+        <input
+          id={id}
+          type={inputType}
+          className={`w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${isPassword ? 'pr-10' : ''}`} // Added pr-10 for padding on right
+          {...props}
+          suppressHydrationWarning
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -80,17 +103,49 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
     e.preventDefault();
     setLoading(true);
     setMessage('');
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      // 1. Auth Login
+      const { data: { user }, error } = await supabase.auth.signInWithPassword({ email, password });
+
       if (error) {
         setMessage(`Error: ${error.message}`);
-      } else {
+        setLoading(false);
+        return;
+      }
+
+      if (user) {
+        console.log("Auth Success. User ID:", user.id); 
+
+        // 2. Check sa Students Table
+        const { data: studentData, error: dbError } = await supabase
+          .from('students')
+          .select('*') 
+          .eq('user_id', user.id)
+          .single();
+
+        console.log("Database Search Result:", studentData); 
+        
+        if (dbError && dbError.code !== 'PGRST116') {
+             console.error("Database Error:", dbError);
+        }
+
         onClose();
-        router.push('/dashboard');
+
+        // 3. Routing Logic
+        if (studentData) {
+          // KUNG STUDENT:
+          console.log("Redirecting to Student Dashboard...");
+          router.push('/studentDashboard'); 
+        } else {
+          // KUNG DILI STUDENT (ADMIN):
+          console.log("User not found in students table. Redirecting to Admin...");
+          router.push('/dashboard'); 
+        }
       }
     } catch (error) {
+      console.error(error);
       setMessage('An unexpected error occurred. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -105,16 +160,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
         <Input label="Email Address" id="login-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input label="Password" id="login-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Logging in...' : 'Login'}
+          {loading ? 'Checking account...' : 'Login'}
         </Button>
       </form>
       {message && <p className={`mt-4 text-center text-sm ${message.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>{message}</p>}
-      <p className="mt-6 text-sm text-center text-gray-600 dark:text-gray-400">
-        No account?{' '}
-        <button onClick={onSwitchToSignUp} className="font-semibold text-green-600 hover:underline dark:text-green-400">
-          Sign Up
-        </button>
-      </p>
     </Modal>
   );
 };
@@ -215,7 +264,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen
           </div>
           <div className="hidden md:flex items-center gap-2 sm:gap-4">
             <Button variant="secondary" onClick={onLoginClick} className="w-auto">Login</Button>
-            <Button variant="primary" onClick={onSignUpClick} className="w-auto">Sign Up</Button>
+            {/* <Button variant="primary" onClick={onSignUpClick} className="w-auto">Sign Up</Button> */}
           </div>
           <div className="md:hidden">
             <button onClick={toggleMenu} aria-label="Toggle menu">
