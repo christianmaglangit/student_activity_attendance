@@ -276,7 +276,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen
           <div className="md:hidden p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <div className="flex flex-col gap-4">
               <Button variant="secondary" onClick={() => { onLoginClick(); toggleMenu(); }}>Login</Button>
-              <Button variant="primary" onClick={() => { onSignUpClick(); toggleMenu(); }}>Sign Up</Button>
+              {/* <Button variant="primary" onClick={() => { onSignUpClick(); toggleMenu(); }}>Sign Up</Button> */}
             </div>
           </div>
         )}
