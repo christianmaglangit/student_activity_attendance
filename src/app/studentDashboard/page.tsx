@@ -502,7 +502,7 @@ export default function StudentDashboard() {
             <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="My QR Code">
                 <div className="flex flex-col items-center gap-6">
                     <div className="text-center">
-                        <p className="text-sm text-slate-500 mb-2">Scan this code to record attendance</p>
+                        <p className="text-sm text-slate-500 mb-2">Download your QR Code</p>
                         {/* Added 'flex flex-col items-center' here to force centering */}
                         <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center flex flex-col items-center justify-center shadow-sm border border-slate-100">
                             <QRCodeCanvas 
