@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { LogOut, User, GraduationCap, Hash, ShieldCheck, KeyRound, UserCheck, X, Coins, CalendarCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { LogOut, User, GraduationCap, Hash, ShieldCheck, KeyRound, UserCheck, X, Coins, CalendarCheck, AlertCircle, Loader2, QrCode, Download } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react'; // Needed for QR
+import { toPng } from 'html-to-image';      // Needed for Download
 
 // --- SHARED COMPONENTS ---
 
@@ -77,6 +79,10 @@ export default function StudentDashboard() {
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [passwordLoading, setPasswordLoading] = useState(false);
+
+    // QR Code Modal & Logic
+    const [showQrModal, setShowQrModal] = useState(false);
+    const qrCodeRef = useRef<HTMLDivElement>(null);
 
     // --- FETCH & CALCULATE ---
     useEffect(() => {
@@ -212,6 +218,23 @@ export default function StudentDashboard() {
         setPasswordLoading(false);
     };
 
+    // --- DOWNLOAD QR FUNCTION ---
+    const handleDownloadQr = () => {
+        if (qrCodeRef.current === null) {
+            return;
+        }
+        toPng(qrCodeRef.current, { cacheBust: true, pixelRatio: 2 })
+            .then((dataUrl) => {
+                const link = document.createElement('a');
+                link.download = `${student.full_name}_QR.png`;
+                link.href = dataUrl;
+                link.click();
+            })
+            .catch((err) => {
+                console.error('Could not download QR', err);
+            });
+    };
+
     if (loading) {
         return (
             <div className="h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 gap-4">
@@ -230,7 +253,7 @@ export default function StudentDashboard() {
                     <div className="flex items-center gap-2">
                         <UserCheck className="h-6 w-6 text-green-600" />
                         <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
-                            Student Activity Portal
+                            Student Attendance Portal
                         </h1>
                     </div>
                     
@@ -301,6 +324,23 @@ export default function StudentDashboard() {
                         <div className="lg:col-span-2 space-y-6">
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* --- QR CODE CARD (UPDATED) --- */}
+                                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                                    <div className="p-4 rounded-full bg-purple-50 text-purple-600">
+                                        <QrCode size={24} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">My QR Code</p>
+                                        <Button 
+                                            variant="secondary" 
+                                            onClick={() => setShowQrModal(true)} 
+                                            className="mt-1 w-full sm:w-auto text-xs py-1 px-2 h-8"
+                                        >
+                                            View & Download
+                                        </Button>
+                                    </div>
+                                </div>
+
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
                                     <div className={`p-4 rounded-full ${totalFines > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
                                         <Coins size={24} />
@@ -313,20 +353,6 @@ export default function StudentDashboard() {
                                     </div>
                                 </div>
 
-                                {/* --- UPDATED CONTRIBUTION CARD --- */}
-                                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                                    <div className="p-4 rounded-full bg-orange-50 text-orange-600">
-                                        <Coins size={24} />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Contribution</p>
-                                        <p className="text-2xl font-bold text-slate-400 dark:text-slate-500">
-                                            Coming Soon
-                                        </p>
-                                    </div>
-                                </div>
-
-
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
                                     <div className="p-4 rounded-full bg-blue-50 text-blue-600">
                                         <CalendarCheck size={24} />
@@ -335,6 +361,19 @@ export default function StudentDashboard() {
                                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Events Joined</p>
                                         <p className="text-2xl font-bold text-slate-800 dark:text-white">
                                             {eventsJoined}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* CONTRIBUTION CARD */}
+                                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                                    <div className="p-4 rounded-full bg-orange-50 text-orange-600">
+                                        <Coins size={24} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Contribution</p>
+                                        <p className="text-2xl font-bold text-slate-400 dark:text-slate-500">
+                                            Coming Soon
                                         </p>
                                     </div>
                                 </div>
@@ -455,6 +494,30 @@ export default function StudentDashboard() {
                         disabled={passwordLoading}
                     >
                         {passwordLoading ? 'Updating...' : 'Update Password'}
+                    </Button>
+                </div>
+            </Modal>
+
+            {/* --- QR CODE MODAL --- */}
+            <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="My QR Code">
+                <div className="flex flex-col items-center gap-6">
+                    <div className="text-center">
+                        <p className="text-sm text-slate-500 mb-2">Scan this code to record attendance</p>
+                        {/* Added 'flex flex-col items-center' here to force centering */}
+                        <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center flex flex-col items-center justify-center shadow-sm border border-slate-100">
+                            <QRCodeCanvas 
+                                value={JSON.stringify({ student_id: student?.student_id })} 
+                                size={200} 
+                                level={"H"}
+                            />
+                            {/* Hidden text in UI but visible in downloaded image for identification */}
+                            <p className="font-bold text-lg mt-4 text-slate-800">{student?.full_name}</p>
+                            <p className="text-xs text-slate-400">Developed by: Christian B. Maglangit</p>
+                        </div>
+                    </div>
+                    
+                    <Button onClick={handleDownloadQr} className="w-full flex items-center justify-center gap-2">
+                        <Download size={18} /> Download Image
                     </Button>
                 </div>
             </Modal>
