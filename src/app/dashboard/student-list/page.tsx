@@ -553,16 +553,16 @@ export default function StudentListPage() {
                     </header>
 
                     <main className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-filter duration-300 ${isModalActive ? 'blur-sm' : ''} pb-20`}>
-                        <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
-                            <div className="w-full sm:w-auto sm:flex-1">
+                        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 mb-6">
+                            <div className="w-full lg:flex-1">
                                 <Input id="search-id" type="text" placeholder="Search name, ID, course, or year..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="text-sm" suppressHydrationWarning icon={Search} />
                             </div>
-                            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-                                <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting}>
+                            <div className="w-full lg:w-auto grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+                                <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting} className="w-full sm:w-auto">
                                     <Archive size={16} className="mr-2" />
                                     <span>{isExporting ? 'Exporting...' : 'QRs'}</span>
                                 </Button>
-                                <Button variant="secondary" onClick={handleExportPDF}>
+                                <Button variant="secondary" onClick={handleExportPDF} className="w-full sm:w-auto">
                                     <Download size={16} className="mr-2" />
                                     <span>PDF</span>
                                 </Button>
@@ -571,7 +571,7 @@ export default function StudentListPage() {
                                     variant="secondary"
                                     onClick={() => handleSecureAction(executeSync)}
                                     disabled={isSyncing || loading}
-                                    className="border-yellow-500 text-yellow-700 bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-900"
+                                    className="w-full sm:w-auto border-yellow-500 text-yellow-700 bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-900"
                                 >
                                     <RefreshCw size={16} className={`mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
                                     <span>Sync</span>
@@ -581,13 +581,13 @@ export default function StudentListPage() {
                                     variant="secondary"
                                     onClick={() => handleSecureAction(executeUnsync)}
                                     disabled={isUnsyncing || isSyncing || loading}
-                                    className="border-red-500 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900 ml-2"
+                                    className="w-full sm:w-auto border-red-500 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900"
                                 >
                                     <UserMinus size={16} className={`mr-2 ${isUnsyncing ? 'animate-pulse' : ''}`} />
                                     <span>Unsync</span>
                                 </Button>
 
-                                <Button variant="primary" onClick={() => setModalState({ type: 'add', student: null })}>
+                                <Button variant="primary" onClick={() => setModalState({ type: 'add', student: null })} className="w-full sm:w-auto col-span-2 sm:col-span-1">
                                     <UserPlus size={16} className="mr-2" />
                                     Add Student
                                 </Button>
