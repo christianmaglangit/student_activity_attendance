@@ -3,9 +3,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { LogOut, User, GraduationCap, Hash, ShieldCheck, KeyRound, UserCheck, X, Coins, CalendarCheck, AlertCircle, Loader2, QrCode, Download } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react'; // Needed for QR
-import { toPng } from 'html-to-image';      // Needed for Download
+import { LogOut, User, GraduationCap, Hash, ShieldCheck, KeyRound, UserCheck, X, Coins, CalendarCheck, AlertCircle, Loader2, QrCode, Download, AlertTriangle, Clock } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react'; 
+import { toPng } from 'html-to-image';      
 
 // --- SHARED COMPONENTS ---
 
@@ -51,7 +51,7 @@ const Modal: React.FC<{
     );
 };
 
-// --- TYPES ---
+// --- TYPES (UPDATED) ---
 type FineBreakdown = {
     activityName: string;
     type: string;
@@ -59,7 +59,8 @@ type FineBreakdown = {
     fineAmount: number;
     attended: number;
     totalSlots: number;
-    isFinished: boolean;
+    activityStatus: 'Upcoming' | 'Ongoing' | 'Completed';
+    isFinished: boolean; // <--- Added this to fix the error
     date?: string;
 };
 
@@ -79,6 +80,9 @@ export default function StudentDashboard() {
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [passwordLoading, setPasswordLoading] = useState(false);
+
+    // Logout Confirmation Modal State
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     // QR Code Modal & Logic
     const [showQrModal, setShowQrModal] = useState(false);
@@ -153,18 +157,29 @@ export default function StudentDashboard() {
                         const uniqueScans = new Set(myLogs.map(log => log.status));
                         const attendedCount = uniqueScans.size;
 
-                        // --- DATE CHECK LOGIC ---
+                        // --- DATE & STATUS CHECK LOGIC ---
+                        const activityStartDate = new Date(act.start_date);
+                        activityStartDate.setHours(0, 0, 0, 0);
+                        
                         const activityEndDate = new Date(act.end_date);
                         activityEndDate.setHours(0, 0, 0, 0);
 
-                        // Check if activity is finished (Today > End Date)
-                        const isFinished = today > activityEndDate;
-
-                        const absences = Math.max(0, totalSlots - attendedCount);
+                        // Determine Status
+                        let status: 'Upcoming' | 'Ongoing' | 'Completed' = 'Completed';
                         
-                        // Default fine is 0 unless finished
+                        if (today < activityStartDate) {
+                            status = 'Upcoming';
+                        } else if (today >= activityStartDate && today <= activityEndDate) {
+                            status = 'Ongoing';
+                        } else {
+                            status = 'Completed';
+                        }
+
+                        // Calculate Fines (Only if completed)
+                        const absences = Math.max(0, totalSlots - attendedCount);
                         let fineAmount = 0;
-                        if (isFinished) {
+                        
+                        if (status === 'Completed') {
                             fineAmount = absences * 50;
                         }
 
@@ -178,7 +193,8 @@ export default function StudentDashboard() {
                             fineAmount: fineAmount,
                             attended: attendedCount,
                             totalSlots: totalSlots,
-                            isFinished: isFinished,
+                            activityStatus: status,
+                            isFinished: status === 'Completed', // This matches the type now
                             date: act.start_date
                         });
                     });
@@ -235,6 +251,20 @@ export default function StudentDashboard() {
             });
     };
 
+    // Helper function for status badges
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'Upcoming':
+                return <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide border border-blue-200">UPCOMING</span>;
+            case 'Ongoing':
+                return <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide border border-green-200 animate-pulse">ONGOING</span>;
+            case 'Completed':
+                return <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide border border-slate-200">COMPLETED</span>;
+            default:
+                return null;
+        }
+    };
+
     if (loading) {
         return (
             <div className="h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 gap-4">
@@ -258,7 +288,7 @@ export default function StudentDashboard() {
                     </div>
                     
                     <button
-                        onClick={handleLogout}
+                        onClick={() => setShowLogoutConfirm(true)}
                         className="flex items-center gap-2 text-sm font-medium text-red-700 hover:text-red-500 transition-colors"
                     >
                         <LogOut className="h-5 w-5" />
@@ -310,12 +340,6 @@ export default function StudentDashboard() {
                                             <span className="text-sm font-bold text-slate-900 dark:text-white">{student?.year_level}</span>
                                         </div>
                                     </div>
-                                    
-                                    {/* <div className="mt-4 w-full">
-                                         <Button variant="secondary" onClick={() => setShowPasswordModal(true)} className="w-full text-xs">
-                                              <KeyRound size={14} className="mr-2" /> Change Password
-                                         </Button>
-                                    </div> */}
                                 </div>
                             </div>
                         </div>
@@ -324,7 +348,7 @@ export default function StudentDashboard() {
                         <div className="lg:col-span-2 space-y-6">
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {/* --- QR CODE CARD (UPDATED) --- */}
+                                {/* --- QR CODE CARD --- */}
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
                                     <div className="p-4 rounded-full bg-purple-50 text-purple-600">
                                         <QrCode size={24} />
@@ -385,7 +409,7 @@ export default function StudentDashboard() {
                                     <div className="flex items-center gap-2">
                                         <AlertCircle className="h-5 w-5 text-slate-400 flex-shrink-0" />
                                         <h3 className="text-lg font-bold text-slate-800 dark:text-white">
-                                            Fine Breakdown
+                                            Activity Log & Fines
                                         </h3>
                                     </div>
                                     <span className="text-xs text-slate-500 italic bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded w-fit">
@@ -396,7 +420,7 @@ export default function StudentDashboard() {
                                     <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
                                         <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
                                             <tr>
-                                                <th className="px-6 py-3">Activity Name</th>
+                                                <th className="px-6 py-3 min-w-[200px]">Activity Name</th>
                                                 <th className="px-6 py-3 text-center">Attendance</th>
                                                 <th className="px-6 py-3 text-right">Fine Amount</th>
                                             </tr>
@@ -408,18 +432,28 @@ export default function StudentDashboard() {
                                                     
                                                     return (
                                                         <tr key={index} className="bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-medium text-slate-900 dark:text-white">{item.activityName}</span>
-                                                                     <span className="font-medium text-slate-900 dark:text-white">{item.date}</span>
+                                                            <td className="px-6 py-4 min-w-[200px]">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-medium text-slate-900 dark:text-white">{item.activityName}</span>
+                                                                        
+                                                                    </div>
                                                                     
-                                                                    <span className="text-xs text-slate-400">{item.type.replace('_', ' ').toUpperCase()}</span>
-                                                                    {!item.isFinished && (
-                                                                        <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
-                                                                            ONGOING
+                                                                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                                                        <Clock size={12} />
+                                                                        <span>
+                                                                            {item.date 
+                                                                                ? new Date(item.date).toLocaleDateString('en-US', {
+                                                                                    year: 'numeric',
+                                                                                    month: 'long',
+                                                                                    day: 'numeric'
+                                                                                })
+                                                                                : ''}
                                                                         </span>
-                                                                    )}
-                                                                    
+                                                                    </div>
+
+                                                                    <span className="text-[10px] text-slate-400 uppercase font-semibold">{item.type.replace('_', ' ')}</span>
+                                                                {getStatusBadge(item.activityStatus)}
                                                                 </div>
                                                             </td>
                                                             
@@ -433,7 +467,10 @@ export default function StudentDashboard() {
                                                                 </span>
                                                             </td>
                                                             <td className={`px-6 py-4 text-right font-bold ${item.fineAmount > 0 ? 'text-red-600' : 'text-slate-300'}`}>
-                                                                {item.fineAmount > 0 ? `₱${item.fineAmount}` : '₱0'}
+                                                                {item.activityStatus === 'Completed' 
+                                                                    ? (item.fineAmount > 0 ? `₱${item.fineAmount}` : '₱0') 
+                                                                    : '--'
+                                                                }
                                                             </td>
                                                         </tr>
                                                     );
@@ -498,19 +535,47 @@ export default function StudentDashboard() {
                 </div>
             </Modal>
 
+            {/* --- LOGOUT CONFIRMATION MODAL --- */}
+            <Modal isOpen={showLogoutConfirm} onClose={() => setShowLogoutConfirm(false)} title="Confirm Logout">
+                <div className="flex flex-col items-center gap-4 text-center">
+                    <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                        <AlertTriangle size={24} />
+                    </div>
+                    <div>
+                        <p className="text-slate-600 dark:text-slate-300">
+                            Are you sure you want to log out of your account?
+                        </p>
+                    </div>
+                    <div className="flex gap-3 w-full mt-2">
+                        <Button 
+                            variant="secondary" 
+                            onClick={() => setShowLogoutConfirm(false)} 
+                            className="flex-1"
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            variant="danger" 
+                            onClick={handleLogout} 
+                            className="flex-1"
+                        >
+                            Yes, Logout
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
             {/* --- QR CODE MODAL --- */}
             <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="My QR Code">
                 <div className="flex flex-col items-center gap-6">
                     <div className="text-center">
                         <p className="text-sm text-slate-500 mb-2">Download your QR Code</p>
-                        {/* Added 'flex flex-col items-center' here to force centering */}
                         <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center flex flex-col items-center justify-center shadow-sm border border-slate-100">
                             <QRCodeCanvas 
                                 value={JSON.stringify({ student_id: student?.student_id })} 
                                 size={200} 
                                 level={"H"}
                             />
-                            {/* Hidden text in UI but visible in downloaded image for identification */}
                             <p className="font-bold text-lg mt-4 text-slate-800">{student?.full_name}</p>
                             <p className="text-xs text-slate-400">Developed by: Christian B. Maglangit</p>
                         </div>

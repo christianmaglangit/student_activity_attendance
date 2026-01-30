@@ -328,7 +328,7 @@ export default function HomePage() {
             </p>
             <div className="mt-10">
               <p className="text-sm text-gray-500">
-                Click &quot;Sign Up&quot; or &quot;Login&quot; in the header to get started.
+                Click &quot;Login&quot; in the header to access your account.”
               </p>
             </div>
           </div>
