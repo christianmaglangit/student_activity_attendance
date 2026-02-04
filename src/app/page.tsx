@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
-import { UserCheck, X, Menu, Eye, EyeOff } from 'lucide-react'; // Added Eye and EyeOff
+import React, { useState, useEffect } from 'react';
+import { UserCheck, X, Menu, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'; 
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-
+// --- BUTTON COMPONENT ---
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary';
 }
@@ -23,19 +23,14 @@ const Button: React.FC<ButtonProps> = ({ children, className, variant = 'primary
   );
 };
 
+// --- INPUT COMPONENT ---
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
 }
 
-// --- UPDATED INPUT COMPONENT ---
-// Now handles Password Visibility Toggling internally
 const Input: React.FC<InputProps> = ({ label, id, type, ...props }) => {
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Check if this input is meant to be a password field
   const isPassword = type === 'password';
-  
-  // Determine the actual type to render (text if showing password, otherwise original type)
   const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
 
   return (
@@ -47,7 +42,7 @@ const Input: React.FC<InputProps> = ({ label, id, type, ...props }) => {
         <input
           id={id}
           type={inputType}
-          className={`w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${isPassword ? 'pr-10' : ''}`} // Added pr-10 for padding on right
+          className={`w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${isPassword ? 'pr-10' : ''}`}
           {...props}
           suppressHydrationWarning
         />
@@ -56,7 +51,6 @@ const Input: React.FC<InputProps> = ({ label, id, type, ...props }) => {
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
-            aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
@@ -66,6 +60,7 @@ const Input: React.FC<InputProps> = ({ label, id, type, ...props }) => {
   );
 };
 
+// --- MODAL COMPONENT ---
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -86,6 +81,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
   );
 };
 
+// --- LOGIN MODAL (UPDATED LOGIC) ---
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -115,37 +111,40 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
       }
 
       if (user) {
-        console.log("Auth Success. User ID:", user.id); 
-
-        // 2. Check sa Students Table
-        const { data: studentData, error: dbError } = await supabase
+        // 2. CHECK STUDENTS TABLE FIRST
+        const { data: studentData } = await supabase
           .from('students')
-          .select('*') 
+          .select('student_id') 
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle(); // Safe query
 
-        console.log("Database Search Result:", studentData); 
-        
-        if (dbError && dbError.code !== 'PGRST116') {
-             console.error("Database Error:", dbError);
-        }
-
-        onClose();
-
-        // 3. Routing Logic
         if (studentData) {
-          // KUNG STUDENT:
-          console.log("Redirecting to Student Dashboard...");
-          router.push('/studentDashboard'); 
-        } else {
-          // KUNG DILI STUDENT (ADMIN):
-          console.log("User not found in students table. Redirecting to Admin...");
-          router.push('/dashboard'); 
+          onClose();
+          router.replace('/studentDashboard'); 
+          return;
         }
+
+        // 3. CHECK USERS (ADMIN) TABLE SECOND
+        const { data: adminData } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (adminData) {
+          onClose();
+          router.replace('/dashboard');
+          return;
+        }
+
+        // 4. FALLBACK: No profile found
+        await supabase.auth.signOut();
+        setMessage("Access Denied: No student or admin profile found.");
+        setLoading(false);
       }
     } catch (error) {
       console.error(error);
-      setMessage('An unexpected error occurred. Please try again.');
+      setMessage('An unexpected error occurred.');
       setLoading(false);
     }
   };
@@ -163,11 +162,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
           {loading ? 'Checking account...' : 'Login'}
         </Button>
       </form>
-      {message && <p className={`mt-4 text-center text-sm ${message.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>{message}</p>}
+      {message && <p className={`mt-4 text-center text-sm ${message.startsWith('Error') || message.startsWith('Access') ? 'text-red-500' : 'text-green-600'}`}>{message}</p>}
     </Modal>
   );
 };
 
+// --- SIGN UP MODAL (FOR ADMINS) ---
 interface SignUpModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -199,6 +199,7 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLo
         return;
       }
       if (user) {
+        // Insert into 'users' table (Admins)
         const { error: insertError } = await supabase.from('users').insert({ id: user.id, name: fullName, email: email, collegedep: collegeDep });
         if (insertError) {
           setMessage(`Account created but failed to save profile: ${insertError.message}`);
@@ -208,7 +209,7 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLo
         }
       }
     } catch (error) {
-      setMessage('An unexpected error occurred. Please try again.');
+      setMessage('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
@@ -217,8 +218,8 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLo
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create an Account</h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Get started by creating your new account.</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create Admin Account</h2>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Create an account to manage attendance.</p>
       </div>
       <form onSubmit={handleSignUp} className="mt-8 space-y-6">
         <Input label="Full Name / College Name" id="signup-name" type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
@@ -243,7 +244,7 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLo
   );
 };
 
-
+// --- HEADER ---
 interface HeaderProps {
   onLoginClick: () => void;
   onSignUpClick: () => void;
@@ -285,6 +286,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen
   );
 };
 
+// --- FOOTER ---
 const Footer: React.FC = () => {
   return (
     <footer className="py-6 bg-white dark:bg-gray-800">
@@ -297,16 +299,82 @@ const Footer: React.FC = () => {
   );
 };
 
-
+// --- HOME PAGE MAIN ---
 export default function HomePage() {
   const [isLoginOpen, setLoginOpen] = useState(false);
   const [isSignUpOpen, setSignUpOpen] = useState(false);
   const [isMenuOpen, setMenuOpen] = useState(false);
+  
+  // SESSION CHECK STATE
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const router = useRouter();
 
   const toggleMenu = () => setMenuOpen(!isMenuOpen);
   const openLogin = () => { setSignUpOpen(false); setLoginOpen(true); };
   const openSignUp = () => { setLoginOpen(false); setSignUpOpen(true); };
   const closeModals = () => { setLoginOpen(false); setSignUpOpen(false); };
+
+  // --- STRICT WATERFALL SESSION CHECK ---
+  useEffect(() => {
+    const checkSession = async () => {
+        setIsCheckingSession(true);
+        
+        // 1. Check if device has an active session
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
+            console.log("Checking User Type for:", user.id);
+
+            // 2. Check STUDENTS table first
+            const { data: studentData } = await supabase
+                .from('students')
+                .select('student_id')
+                .eq('user_id', user.id)
+                .maybeSingle(); 
+
+            if (studentData) {
+                console.log("--> Found in Students. Redirecting to Student Dashboard.");
+                router.replace('/studentDashboard');
+                return;
+            }
+
+            // 3. If not Student, Check USERS (Admin) table
+            const { data: adminData } = await supabase
+                .from('users')
+                .select('id')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (adminData) {
+                console.log("--> Found in Users (Admin). Redirecting to Admin Dashboard.");
+                router.replace('/dashboard');
+                return;
+            }
+
+            // 4. Fallback: User logged in but has no profile
+            // Safety measure: Log them out so they don't get stuck
+            console.warn("User has no profile in Students or Users. Forcing Logout.");
+            await supabase.auth.signOut();
+            setIsCheckingSession(false);
+
+        } else {
+            // No user logged in
+            setIsCheckingSession(false);
+        }
+    };
+
+    checkSession();
+  }, [router]);
+
+  // If checking, show a loader
+  if (isCheckingSession) {
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-900">
+              <Loader2 className="h-10 w-10 text-green-600 animate-spin mb-4" />
+              <p className="text-gray-600 dark:text-gray-300 font-medium">Authenticating...</p>
+          </div>
+      );
+  }
 
   return (
     <div className="bg-gray-200 dark:bg-gray-900 min-h-screen">
@@ -328,7 +396,7 @@ export default function HomePage() {
             </p>
             <div className="mt-10">
               <p className="text-sm text-gray-500">
-                Click &quot;Login&quot; in the header to access your account.”
+                Click &quot;Login&quot; in the header to access your account.
               </p>
             </div>
           </div>

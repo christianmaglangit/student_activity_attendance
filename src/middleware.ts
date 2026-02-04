@@ -1,5 +1,3 @@
-// src/middleware.ts
-
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -19,37 +17,52 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value, ...options })
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          })
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value: '', ...options })
+          request.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
         },
       },
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
-  const { pathname } = request.nextUrl
+  // I-refresh lang ang session, AYAW PAG REDIRECT DIRI.
+  // Ang app/page.tsx na ang bahala sa redirect logic.
+  await supabase.auth.getUser()
 
-  // Kung walay session ug ga-try ug access sa dashboard, i-redirect sa home ('/')
-  if (!session && pathname.startsWith('/dashboard')) {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
-  // Kung naay session ug naa sila sa home page ('/'), i-redirect sa dashboard
-  if (session && pathname === '/') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-  
   return response
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

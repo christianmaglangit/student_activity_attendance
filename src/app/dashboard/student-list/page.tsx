@@ -14,6 +14,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import JSZip from 'jszip';
 import { PasswordConfirmationModal } from '@/app/components/auth/PasswordConfirmationModal';
+import Swal from 'sweetalert2'; // <--- IMPORT SWEETALERT
 
 // --- IMPORT THE SERVER ACTIONS ---
 import { createStudentWithAccount, syncAllMissingAccounts, unsyncAllAccounts } from '@/app/actions/studentActions';
@@ -171,7 +172,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => Promise<void> }) => (
         <div className="flex h-16 items-center border-b px-4 lg:px-6 dark:border-slate-800">
             <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-lg">
                 <UserCheck className="h-6 w-6 text-green-600" />
-                <span className="text-slate-800 dark:text-white">Attendance Portal</span>
+                <span className="text-slate-800 dark:text-white">Student Activity Attendance</span>
             </Link>
         </div>
         <div className="flex-1 py-2">
@@ -358,24 +359,47 @@ export default function StudentListPage() {
     const closeModal = () => { setModalState({ type: null, student: null }); setFormData(initialFormState); setMessage(''); };
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { const { id, value } = e.target; setFormData(prev => ({ ...prev, [id]: value })); };
 
-    // --- HANDLE ADD STUDENT ---
+    // --- HANDLE ADD STUDENT (UPDATED WITH SWEETALERT) ---
     const handleAddStudent = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setMessage('');
+        // setMessage(''); // We use Swal now, but can keep this for other errors if needed.
+
         try {
             const result = await createStudentWithAccount(formData);
+
             if (result.success) {
                 closeModal();
                 setModalState({ type: 'qr', student: result.student as Student });
                 fetchStudents();
-                setMessage(result.message);
+                
+                // --- SUCCESS ALERT ---
+                Swal.fire({
+                    title: 'Success!',
+                    text: 'Student has been added successfully.',
+                    icon: 'success',
+                    confirmButtonColor: '#16a34a', // Green-600
+                    confirmButtonText: 'Great!'
+                });
+
             } else {
-                setMessage(result.message);
+                // --- ERROR / DUPLICATE ALERT ---
+                Swal.fire({
+                    title: 'Failed',
+                    text: result.message, // Shows "Student ID already exists" from backend
+                    icon: 'error',
+                    confirmButtonColor: '#dc2626', // Red-600
+                    confirmButtonText: 'Try Again'
+                });
             }
         } catch (error) {
-            setMessage('Unexpected error creating student.');
             console.error(error);
+            Swal.fire({
+                title: 'Error',
+                text: 'An unexpected error occurred.',
+                icon: 'error',
+                confirmButtonColor: '#dc2626'
+            });
         }
         setLoading(false);
     };
@@ -545,7 +569,7 @@ export default function StudentListPage() {
                 <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
                     <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
                         <div className="w-full flex-1 flex items-center justify-between">
-                            <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Attendance Portal</h1>
+                            <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Student Activity Attendance</h1>
                             <button onClick={handleLogout} className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50" aria-label="Logout">
                                 <LogOut className="h-5 w-5" />
                             </button>
@@ -553,11 +577,13 @@ export default function StudentListPage() {
                     </header>
 
                     <main className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-filter duration-300 ${isModalActive ? 'blur-sm' : ''} pb-20`}>
-                        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 mb-6">
+                        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4 mb-6">
                             <div className="w-full lg:flex-1">
                                 <Input id="search-id" type="text" placeholder="Search name, ID, course, or year..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="text-sm" suppressHydrationWarning icon={Search} />
                             </div>
-                            <div className="w-full lg:w-auto grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+                            
+                            {/* --- RESPONSIVE BUTTON GRID --- */}
+                            <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap lg:flex-nowrap">
                                 <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting} className="w-full sm:w-auto">
                                     <Archive size={16} className="mr-2" />
                                     <span>{isExporting ? 'Exporting...' : 'QRs'}</span>
@@ -587,7 +613,7 @@ export default function StudentListPage() {
                                     <span>Unsync</span>
                                 </Button>
 
-                                <Button variant="primary" onClick={() => setModalState({ type: 'add', student: null })} className="w-full sm:w-auto col-span-2 sm:col-span-1">
+                                <Button variant="primary" onClick={() => setModalState({ type: 'add', student: null })} className="col-span-2 w-full sm:w-auto sm:col-span-1">
                                     <UserPlus size={16} className="mr-2" />
                                     Add Student
                                 </Button>
