@@ -88,6 +88,29 @@ export default function StudentDashboard() {
     const [showQrModal, setShowQrModal] = useState(false);
     const qrCodeRef = useRef<HTMLDivElement>(null);
 
+    // --- NEW: PRESENCE BROADCASTER ---
+    // This effect runs whenever 'student' data is loaded.
+    // It tells Supabase: "I am user X, and I am online."
+    useEffect(() => {
+        if (!student || !student.user_id) return;
+
+        const channel = supabase.channel('online-users');
+
+        channel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await channel.track({
+                    user_id: student.user_id,
+                    online_at: new Date().toISOString(),
+                });
+            }
+        });
+
+        // Cleanup: untrack when component unmounts
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [student]); // Re-run only when student data is available
+
     // --- FETCH & CALCULATE ---
     useEffect(() => {
         const fetchAndCalculate = async () => {
@@ -453,7 +476,7 @@ export default function StudentDashboard() {
                                                                     </div>
 
                                                                     <span className="text-[10px] text-slate-400 uppercase font-semibold">{item.type.replace('_', ' ')}</span>
-                                                                {getStatusBadge(item.activityStatus)}
+                                                                    {getStatusBadge(item.activityStatus)}
                                                                 </div>
                                                             </td>
                                                             

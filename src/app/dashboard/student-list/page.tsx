@@ -14,7 +14,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import JSZip from 'jszip';
 import { PasswordConfirmationModal } from '@/app/components/auth/PasswordConfirmationModal';
-import Swal from 'sweetalert2'; // <--- IMPORT SWEETALERT
+import Swal from 'sweetalert2';
 
 // --- IMPORT THE SERVER ACTIONS ---
 import { createStudentWithAccount, syncAllMissingAccounts, unsyncAllAccounts } from '@/app/actions/studentActions';
@@ -235,13 +235,29 @@ const BottomNavBar = () => {
 };
 
 // --- TABLE ROW COMPONENTS ---
-const StudentListItem = ({ student, onQr, onEdit, onDelete, index }: { student: Student, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number }) => (
+const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index }: { student: Student, isOnline: boolean, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number }) => (
     <tr className="group bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td className="px-6 py-4 font-medium text-slate-500">{index + 1}</td>
         <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap dark:text-white">{student.full_name}</td>
         <td className="px-6 py-4 hidden sm:table-cell">{student.student_id}</td>
         <td className="px-6 py-4 hidden md:table-cell">{student.course}</td>
         <td className="px-6 py-4 hidden lg:table-cell">{student.year_level}</td>
+        
+        {/* --- NEW STATUS COLUMN --- */}
+        <td className="px-6 py-4">
+            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                isOnline 
+                ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' 
+                : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+            }`}>
+                <span className={`relative flex h-2 w-2`}>
+                  {isOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>}
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-green-500' : 'bg-slate-400'}`}></span>
+                </span>
+                {isOnline ? 'Online' : 'Offline'}
+            </div>
+        </td>
+
         <td className="px-6 py-4">
             <div className="flex justify-center items-center gap-1">
                 <button onClick={onQr} className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><QrCode size={18} /></button>
@@ -261,6 +277,7 @@ const ListItemSkeleton = () => (
         <td className="px-6 py-4"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4 animate-pulse"></div></td>
         <td className="px-6 py-4 hidden sm:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4 hidden md:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
+        <td className="px-6 py-4 hidden lg:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4 hidden lg:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4 text-center"><div className="flex justify-center gap-2"><div className="h-6 w-6 bg-slate-200 dark:bg-slate-700 rounded-md animate-pulse"></div></div></td>
     </tr>
@@ -304,12 +321,42 @@ export default function StudentListPage() {
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     const [isUnsyncing, setIsUnsyncing] = useState(false);
 
+    // --- NEW: ONLINE USERS STATE ---
+    const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+
     useEffect(() => {
         const fetchUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) setUserEmail(user.email || null);
         };
         fetchUser();
+    }, []);
+
+    // --- NEW: PRESENCE LISTENER ---
+    // This connects to Supabase and listens for students coming online
+    useEffect(() => {
+        const channel = supabase.channel('online-users');
+
+        channel
+            .on('presence', { event: 'sync' }, () => {
+                const newState = channel.presenceState();
+                const onlineIds = new Set<string>();
+                
+                // newState is { "presence-id": [ { user_id: "...", online_at: "..." } ] }
+                for (const id in newState) {
+                    const presenceEntry = newState[id] as any;
+                    // We extract the user_id sent by the student dashboard
+                    if (presenceEntry && presenceEntry[0] && presenceEntry[0].user_id) {
+                        onlineIds.add(presenceEntry[0].user_id);
+                    }
+                }
+                setOnlineUserIds(onlineIds);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const handleSecureAction = (action: () => void) => {
@@ -636,6 +683,7 @@ export default function StudentListPage() {
                                             <th scope="col" className="px-6 py-3 hidden sm:table-cell">ID Number</th>
                                             <th scope="col" className="px-6 py-3 hidden md:table-cell">Course</th>
                                             <th scope="col" className="px-6 py-3 hidden lg:table-cell">Year</th>
+                                            <th scope="col" className="px-6 py-3">Status</th> {/* NEW COLUMN HEADER */}
                                             <th scope="col" className="px-6 py-3 text-center">Actions</th>
                                         </tr>
                                     </thead>
@@ -648,6 +696,7 @@ export default function StudentListPage() {
                                                     key={student.student_id}
                                                     student={student}
                                                     index={index}
+                                                    isOnline={onlineUserIds.has(student.user_id)} // PASS STATUS PROP
                                                     onQr={() => openQrModal(student)}
                                                     onEdit={() => handleSecureAction(() => openEditModal(student))}
                                                     onDelete={() => handleSecureAction(() => openDeleteModal(student))}
@@ -655,7 +704,7 @@ export default function StudentListPage() {
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={6} className="text-center p-10">
+                                                <td colSpan={7} className="text-center p-10">
                                                     <div className="flex flex-col items-center gap-4">
                                                         <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
                                                             <UserX className="h-10 w-10 text-slate-500" />
