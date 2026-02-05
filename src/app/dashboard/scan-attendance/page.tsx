@@ -6,11 +6,15 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Html5Qrcode } from 'html5-qrcode';
 import Swal from 'sweetalert2';
+import CryptoJS from 'crypto-js'; // <--- IMPORT CRYPTO-JS
 import {
     LayoutDashboard, Users, ClipboardList, QrCode, LogOut, UserCheck, Search, Camera, CameraOff,
     CheckCircle, AlertTriangle as WarningIcon, XCircle, Clock,
-    Activity // Gidugang ang Activity icon
+    Activity
 } from 'lucide-react';
+
+// --- SECRET KEY (Dapat same ni sa Student Dashboard) ---
+const QR_SECRET_KEY = process.env.NEXT_PUBLIC_QR_SECRET || 'attendance-system-secure-key-2024';
 
 type ActivitySchedule = {
     id?: number;
@@ -44,19 +48,17 @@ type AttendanceRecord = Student & {
     statusType: 'success' | 'error' | 'warning';
 };
 
-// --- GI-UPDATE ANG DESKTOP NAVLINK LOGIC ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
-    // Gi-ayo ang logic para mo-handle og prefix matching
     const isActive = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
     return (
         <Link
-        href={href}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
-            isActive
-            ? 'bg-green-100 text-green-700 dark:bg-slate-800 dark:text-slate-50 font-semibold'
-            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50'
-        }`}
+            href={href}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
+                isActive
+                    ? 'bg-green-100 text-green-700 dark:bg-slate-800 dark:text-slate-50 font-semibold'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50'
+            }`}
         >
             <Icon className="h-5 w-5" />
             {children}
@@ -106,19 +108,17 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
     </div>
 );
 
-// --- GIDUGANG NGA COMPONENT ---
 const BottomNavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
-    const isActive = href === "/dashboard" 
-        ? pathname === href 
+    const isActive = href === "/dashboard"
+        ? pathname === href
         : href !== "/" && pathname.startsWith(href);
-    
+
     return (
         <Link
             href={href}
-            className={`flex flex-col items-center justify-center gap-1 p-2 transition-colors ${
-                isActive ? 'text-red-600' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
+            className={`flex flex-col items-center justify-center gap-1 p-2 transition-colors ${isActive ? 'text-red-600' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
         >
             <Icon className="h-6 w-6" />
             <span className="text-xs font-medium">{children}</span>
@@ -126,15 +126,12 @@ const BottomNavLink = ({ href, icon: Icon, children }: { href: string; icon: Rea
     );
 };
 
-// --- GIDUGANG NGA COMPONENT ---
 const BottomNavBar = () => {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-20 h-20 border-t bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.06)] md:hidden dark:bg-slate-900 dark:border-slate-800">
-            
             <div className="mx-auto grid h-16 max-w-lg grid-cols-5 items-center px-2">
                 <BottomNavLink href="/dashboard" icon={LayoutDashboard}>Home</BottomNavLink>
                 <BottomNavLink href="/dashboard/student-list" icon={Users}>Students</BottomNavLink>
-                
                 <div className="flex justify-center">
                     <Link
                         href="/dashboard/scan-attendance"
@@ -145,15 +142,11 @@ const BottomNavBar = () => {
                         <span className="text-sm font-medium">Scan</span>
                     </Link>
                 </div>
-                
                 <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
                 <BottomNavLink href="/dashboard/fines-report" icon={Activity}>Fines</BottomNavLink>
             </div>
-
             <div className="text-center pb-1">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Developed by: <strong>Christian B. Maglangit</strong>
-                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Developed by: <strong>Christian B. Maglangit</strong></p>
             </div>
         </nav>
     );
@@ -184,7 +177,6 @@ const AttendanceLogItem = ({ record }: { record: AttendanceRecord }) => {
 };
 
 export default function ScanAttendancePage() {
-    // --- GIKUHA ANG 'isSidebarOpen' STATE ---
     const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
     const [allActivities, setAllActivities] = useState<Activity[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -208,8 +200,6 @@ export default function ScanAttendancePage() {
 
             const determineAttendanceStatus = (activity: Activity): { status: string, type: 'success' | 'warning' | 'error' } => {
                 const now = new Date();
-                // Get today's date string in YYYY-MM-DD format, considering local timezone offset might be needed depending on server/client config
-                // Using a simpler approach for now, assuming client's date is relevant. For robustness, consider UTC.
                 const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
                 const todaySchedule = activity.activity_schedules.find(s => s.date === todayStr);
@@ -218,68 +208,69 @@ export default function ScanAttendancePage() {
                     return { status: "No schedule defined for today", type: 'error' };
                 }
 
-                // Helper to parse time string into a Date object for today
                 const parseTime = (timeStr: string | null): Date | null => {
-                    if (!timeStr) return null; // Return null if time string is null or empty
+                    if (!timeStr) return null;
                     try {
                         const [hours, minutes] = timeStr.split(':').map(Number);
-                        if (isNaN(hours) || isNaN(minutes)) return null; // Return null if parsing fails
-                        const date = new Date(now); // Use current date as base
-                        date.setHours(hours, minutes, 0, 0); // Set hours and minutes for today
+                        if (isNaN(hours) || isNaN(minutes)) return null;
+                        const date = new Date(now);
+                        date.setHours(hours, minutes, 0, 0);
                         return date;
                     } catch (e) {
-                        console.error("Error parsing time string:", timeStr, e);
-                        return null; // Return null on error
+                        return null;
                     }
                 };
 
-                const gracePeriod = 120 * 60000; // 120 minutes in milliseconds
+                const gracePeriod = 120 * 60000; // 120 minutes
 
-                // Parse schedule times, results can be Date objects or null
                 const amInTime = parseTime(todaySchedule.am_in);
                 const amOutTime = parseTime(todaySchedule.am_out);
                 const pmInTime = parseTime(todaySchedule.pm_in);
                 const pmOutTime = parseTime(todaySchedule.pm_out);
 
-                // Check AM In
-                if (amInTime && now >= amInTime && now < new Date(amInTime.getTime() + gracePeriod)) {
-                    return { status: 'Time In (AM)', type: 'success' };
-                }
-                // Check AM Out
-                if (amOutTime && now >= amOutTime && now < new Date(amOutTime.getTime() + gracePeriod)) {
-                     return { status: 'Time Out (AM)', type: 'success' };
-                }
-                // Check PM In
-                if (pmInTime && now >= pmInTime && now < new Date(pmInTime.getTime() + gracePeriod)) {
-                    return { status: 'Time In (PM)', type: 'success' };
-                }
-                // Check PM Out
-                if (pmOutTime && now >= pmOutTime && now < new Date(pmOutTime.getTime() + gracePeriod)) {
-                    return { status: 'Time Out (PM)', type: 'success' };
-                }
+                if (amInTime && now >= amInTime && now < new Date(amInTime.getTime() + gracePeriod)) return { status: 'Time In (AM)', type: 'success' };
+                if (amOutTime && now >= amOutTime && now < new Date(amOutTime.getTime() + gracePeriod)) return { status: 'Time Out (AM)', type: 'success' };
+                if (pmInTime && now >= pmInTime && now < new Date(pmInTime.getTime() + gracePeriod)) return { status: 'Time In (PM)', type: 'success' };
+                if (pmOutTime && now >= pmOutTime && now < new Date(pmOutTime.getTime() + gracePeriod)) return { status: 'Time Out (PM)', type: 'success' };
 
-                // If none of the above matched, it's out of bounds
                 return { status: 'Outside scannable time window', type: 'warning' };
             };
 
             const processScan = async (decodedText: string) => {
                 if (isProcessing) return;
                 isProcessing = true;
-                
+
                 try {
-                    let studentId: string;
+                    let studentId = '';
+
+                    // 1. ATTEMPT DECRYPTION FIRST
                     try {
-                        const qrData = JSON.parse(decodedText);
-                        studentId = qrData.student_id;
-                    } catch (e) {
-                        studentId = decodedText;
+                        const bytes = CryptoJS.AES.decrypt(decodedText, QR_SECRET_KEY);
+                        const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
+                        if (decryptedStr) {
+                            const parsed = JSON.parse(decryptedStr);
+                            studentId = parsed.student_id;
+                            console.log("Decrypted ID:", studentId);
+                        }
+                    } catch (err) {
+                        console.log("Not encrypted, trying raw...");
+                    }
+
+                    // 2. FALLBACK TO RAW TEXT (Legacy Support)
+                    if (!studentId) {
+                        try {
+                            const qrData = JSON.parse(decodedText);
+                            studentId = qrData.student_id;
+                        } catch (e) {
+                            studentId = decodedText; // Assumption: raw ID string
+                        }
                     }
 
                     if (!studentId || studentId.length < 5) {
                         await Swal.fire({ icon: 'error', title: 'Invalid QR', text: 'The QR Code format is invalid.', timer: 2500, showConfirmButton: false });
                         return;
                     }
-                    
+
                     const { data: studentData, error: studentError } = await supabase
                         .from('students')
                         .select('student_id, full_name, gender, course, year_level')
@@ -299,7 +290,7 @@ export default function ScanAttendancePage() {
                         await Swal.fire({ icon: 'warning', title: 'Scan Warning', text: `${studentData.full_name} - ${attendance.status}`, timer: 2500, showConfirmButton: false });
                         return;
                     }
-                    
+
                     const { data: existingRecord } = await supabase
                         .from('attendance_report')
                         .select('id')
@@ -312,25 +303,23 @@ export default function ScanAttendancePage() {
                         await Swal.fire({ icon: 'warning', title: 'Already Scanned', text: `${studentData.full_name} has already recorded a "${attendance.status}".`, timer: 2500, showConfirmButton: false });
                         return;
                     }
-                    
-                    await supabase.from('attendance_report').insert({ 
-                        activity_id: selectedActivity!.id, 
-                        student_id: studentData.student_id, 
-                        status: attendance.status, 
-                        scanned_at: new Date().toISOString() 
-                    });
 
+                    await supabase.from('attendance_report').insert({
+                        activity_id: selectedActivity!.id,
+                        student_id: studentData.student_id,
+                        status: attendance.status,
+                        scanned_at: new Date().toISOString()
+                    });
 
                     const newRecord: AttendanceRecord = { ...studentData, scanTime: new Date().toLocaleTimeString(), status: attendance.status, statusType: attendance.type };
                     setScannedStudents(prev => [newRecord, ...prev]);
-                    
 
-                    Swal.fire({ 
-                        icon: 'success', 
-                        title: `${attendance.status} Recorded!`, 
-                        text: `${studentData.full_name} has successfully scanned.`, 
-                        timer: 1500, 
-                        showConfirmButton: false 
+                    Swal.fire({
+                        icon: 'success',
+                        title: `${attendance.status} Recorded!`,
+                        text: `${studentData.full_name} has successfully scanned.`,
+                        timer: 1500,
+                        showConfirmButton: false
                     });
 
                 } finally {
@@ -345,15 +334,15 @@ export default function ScanAttendancePage() {
                     const size = Math.max(250, Math.floor(minEdge * 0.8));
                     return { width: size, height: size, };
                 },
-                disableFlip: true 
+                disableFlip: true
             };
-            
-            html5QrCode.start({ facingMode: "environment" }, config, processScan, () => {})
+
+            html5QrCode.start({ facingMode: "environment" }, config, processScan, () => { })
                 .catch(async (err) => {
                     console.error("Camera Start Error:", err);
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Camera Error', 
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Camera Error',
                         text: `Failed to start scanner. Ensure your browser grants camera permission and that you are using HTTPS. Error: ${err.message || err.toString()}`,
                         confirmButtonText: 'OK'
                     });
@@ -367,14 +356,14 @@ export default function ScanAttendancePage() {
                             await html5QrCode.stop();
                             console.log("HTML5-Qrcode stopped successfully.");
                         } catch (err) {
-                            console.warn("Failed to stop the scanner cleanly. (This is often safe to ignore if the stream was already closed)", err);
+                            console.warn("Failed to stop the scanner cleanly.", err);
                         }
                     }
                 };
                 stopScanner();
             };
         }
-    }, [isCameraOn, selectedActivity]); 
+    }, [isCameraOn, selectedActivity]);
 
     useEffect(() => {
         const fetchActivities = async () => {
@@ -413,24 +402,18 @@ export default function ScanAttendancePage() {
 
     return (
         <div className={`grid h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]`}>
-            
+
             <div className="hidden border-r bg-white md:block dark:bg-slate-900 dark:border-slate-800">
                 <SidebarContent onLogout={handleLogout} />
             </div>
 
-            {/* --- GIKUHA ANG MOBILE SIDEBAR/DRAWER NGA CODE --- */}
-
             <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
-                
-                {/* --- GI-UPDATE ANG HEADER --- */}
                 <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
-                    {/* Gikuha ang Hamburger Button */}
                     <div className="w-full flex-1 flex items-center justify-between">
                         <h1 className="text-xl font-semibold text-slate-800 dark:text-white">
-                           Attendance Portal
+                            Attendance Portal
                         </h1>
-                         {/* Gidugang ang Logout Button */}
-                         <button
+                        <button
                             onClick={handleLogout}
                             className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50"
                             aria-label="Logout"
@@ -440,7 +423,6 @@ export default function ScanAttendancePage() {
                     </div>
                 </header>
 
-                {/* --- GI-UPDATE ANG MAIN (gidugang ang pb-20) --- */}
                 <main className={`flex-1 overflow-y-auto p-4 lg:p-6 pb-20`}>
                     <div className="grid lg:grid-cols-3 gap-6 items-start">
                         <div className="p-6 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-4 lg:col-span-2">
@@ -467,11 +449,10 @@ export default function ScanAttendancePage() {
                                     <p className="text-sm font-medium text-green-600 dark:text-green-400 flex-shrink-0">{currentDateTime.toLocaleTimeString()}</p>
                                 )}
                             </div>
-                            
+
                             <div className="w-full aspect-square lg:h-[500px] dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
-                                {/* This is where the scanner view will be injected */}
                                 <div id="reader" className="justify-center w-full h-full"></div>
-                                
+
                                 {!isCameraOn && (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4">
                                         <CameraOff size={48} className="mb-2" />
@@ -482,7 +463,7 @@ export default function ScanAttendancePage() {
                                 )}
                             </div>
                             <Button onClick={() => setCameraOn(prev => !prev)} disabled={!selectedActivity} className='w-full flex items-center justify-center gap-2' variant={isCameraOn ? 'danger' : 'primary'}>
-                                {isCameraOn ? <><CameraOff size={18}/> Stop Scanner</> : <><Camera size={18}/> Start Scanner</>}
+                                {isCameraOn ? <><CameraOff size={18} /> Stop Scanner</> : <><Camera size={18} /> Start Scanner</>}
                             </Button>
                         </div>
 
@@ -508,7 +489,6 @@ export default function ScanAttendancePage() {
                     </div>
                 </main>
 
-                {/* --- GIDUGANG ANG BOTTOM NAV BAR --- */}
                 <BottomNavBar />
             </div>
         </div>
