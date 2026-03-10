@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import {
     LayoutDashboard, Users, ClipboardList, QrCode, LogOut, X, UserCheck, Download, UserPlus, Edit, Trash2, Search, Archive, AlertTriangle, UserX, MoreHorizontal,
-    Activity, RefreshCw, UserMinus, Loader2, CheckCircle, XCircle, MessageSquare, Send, Megaphone
+    Activity, RefreshCw, UserMinus, Loader2, CheckCircle, XCircle, MessageSquare, Send, Megaphone, Bell
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng } from 'html-to-image';
@@ -224,7 +224,6 @@ const StudentListItem = ({ student, isOnline, unreadCount, onChat, onQr, onEdit,
 
         <td className="px-6 py-4">
             <div className="flex justify-center items-center gap-1">
-                {/* --- CHAT BUTTON WITH UNREAD BADGE --- */}
                 <button onClick={onChat} title="Chat with Student" className="relative p-2 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-800">
                     <MessageSquare size={18} />
                     {unreadCount > 0 && (
@@ -284,14 +283,18 @@ export default function StudentListPage() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [newChatMessage, setNewChatMessage] = useState('');
     const [isSendingMessage, setIsSendingMessage] = useState(false);
-    const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
     
+    // NOTIFICATIONS STATE
+    const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
+    const [showNotifications, setShowNotifications] = useState(false);
+    const notificationRef = useRef<HTMLDivElement>(null);
+
     // BROADCAST STATE
     const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
     const [broadcastMessage, setBroadcastMessage] = useState('');
     const [isBroadcasting, setIsBroadcasting] = useState(false);
 
-    // REFS FOR REALTIME SYNC (To avoid dependency stale closures)
+    // REFS FOR REALTIME SYNC
     const activeChatStudentRef = useRef<Student | null>(null);
     const chatModalOpenRef = useRef<boolean>(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -335,11 +338,21 @@ export default function StudentListPage() {
         fetchUser();
     }, []);
 
-    // Update Refs for the real-time listener to always have the latest state
     useEffect(() => {
         activeChatStudentRef.current = activeChatStudent;
         chatModalOpenRef.current = chatModalOpen;
     }, [activeChatStudent, chatModalOpen]);
+
+    // Handle clicks outside notification dropdown
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+                setShowNotifications(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // --- SINGLE REAL-TIME LISTENER FOR ALL MESSAGES ---
     useEffect(() => {
@@ -524,6 +537,12 @@ export default function StudentListPage() {
         setChatModalOpen(true);
     };
 
+    // --- NOTIFICATION CLICK HANDLER ---
+    const handleNotificationClick = (student: Student) => {
+        setShowNotifications(false);
+        handleChat(student);
+    };
+
     // --- SEND MESSAGE FUNCTION ---
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -705,6 +724,20 @@ export default function StudentListPage() {
     
     const isModalActive = modalState.type !== null;
 
+    // Derived state for notifications
+    const totalUnreadCount = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
+    const notificationsList = Object.keys(unreadMessages)
+        .filter(userId => unreadMessages[userId] > 0)
+        .map(userId => {
+            const student = students.find(s => s.user_id === userId);
+            return {
+                userId,
+                student,
+                count: unreadMessages[userId]
+            };
+        })
+        .filter(n => n.student); // Only show if we found the matching student
+
     return (
         <>
             {(isSyncing || isUnsyncing || isBroadcasting) && (
@@ -764,9 +797,72 @@ export default function StudentListPage() {
                     <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
                         <div className="w-full flex-1 flex items-center justify-between">
                             <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Student Activity Attendance</h1>
-                            <button onClick={handleLogout} className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50" aria-label="Logout">
-                                <LogOut className="h-5 w-5" />
-                            </button>
+                            
+                            {/* --- UPDATED HEADER WITH NOTIFICATIONS --- */}
+                            <div className="flex items-center gap-2 sm:gap-4 relative" ref={notificationRef}>
+                                {/* Notification Bell */}
+                                <button 
+                                    onClick={() => setShowNotifications(!showNotifications)} 
+                                    className="relative p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white rounded-full transition-colors"
+                                    aria-label="Notifications"
+                                >
+                                    <Bell className="h-5 w-5" />
+                                    {totalUnreadCount > 0 && (
+                                        <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-slate-900">
+                                            {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* Notification Dropdown */}
+                                {showNotifications && (
+                                    <div className="absolute top-12 right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-in slide-in-from-top-2 duration-200">
+                                        <div className="p-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                                            <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Messages Notifications</h3>
+                                        </div>
+                                        <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                            {notificationsList.length > 0 ? (
+                                                notificationsList.map((notif, idx) => (
+                                                    <button 
+                                                        key={idx} 
+                                                        onClick={() => handleNotificationClick(notif.student as Student)}
+                                                        className="w-full text-left p-4 border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-start gap-3"
+                                                    >
+                                                        <div className="h-10 w-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center shrink-0">
+                                                            <MessageSquare size={18} />
+                                                        </div>
+                                                        <div className="flex-1 overflow-hidden">
+                                                            <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{notif.student?.full_name}</p>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Sent you {notif.count} new message{notif.count > 1 ? 's' : ''}</p>
+                                                        </div>
+                                                        <div className="shrink-0 self-center">
+                                                            <span className="h-5 w-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full">
+                                                                {notif.count}
+                                                            </span>
+                                                        </div>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="p-8 text-center text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center">
+                                                    <Bell className="h-10 w-10 mb-3 opacity-20" />
+                                                    <p className="text-sm">No new messages</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
+
+                                {/* Logout Button */}
+                                <button onClick={handleLogout} className="p-2 rounded-full md:hidden text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-50" aria-label="Logout">
+                                    <LogOut className="h-5 w-5" />
+                                </button>
+                                <button onClick={handleLogout} className="hidden md:flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-red-600 transition-colors mr-2">
+                                    <LogOut className="h-4 w-4" />
+                                    <span>Logout</span>
+                                </button>
+                            </div>
                         </div>
                     </header>
 
@@ -784,7 +880,7 @@ export default function StudentListPage() {
                                     </Button>
                                 )}
                                 
-                                {/* --- BROADCAST BUTTON ADDED HERE --- */}
+                                {/* --- BROADCAST BUTTON --- */}
                                 <Button variant="secondary" onClick={() => setIsBroadcastModalOpen(true)} className="w-full sm:w-auto border-indigo-500 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-900">
                                     <Megaphone size={16} className="mr-2" />
                                     <span>Broadcast</span>
