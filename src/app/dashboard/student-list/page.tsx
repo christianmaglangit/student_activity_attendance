@@ -184,7 +184,6 @@ const BottomNavBar = () => {
     );
 };
 
-// --- UPDATED TABLE ROW WITH CHECKBOX COLUMN ---
 const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index, isSelected, onToggleSelect }: { student: Student, isOnline: boolean, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number, isSelected: boolean, onToggleSelect: () => void }) => (
     <tr className={`group bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isSelected ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
         <td className="px-6 py-4">
@@ -246,8 +245,6 @@ export default function StudentListPage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
-    
-    // NEW STATE: Multiple Selection
     const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
 
     const [modalState, setModalState] = useState<{
@@ -274,8 +271,11 @@ export default function StudentListPage() {
     const hiddenQrRef = useRef<HTMLDivElement>(null);
     const [qrToRender, setQrToRender] = useState<Student | null>(null);
     const router = useRouter();
-    const genderOptions = ['Male', 'Female'];
-    const yearLevelOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+    
+    // UPDATED OPTIONS TO BE ALL CAPS
+    const genderOptions = ['MALE', 'FEMALE'];
+    const yearLevelOptions = ['1ST YEAR', '2ND YEAR', '3RD YEAR', '4TH YEAR'];
+    
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
     const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -372,9 +372,13 @@ export default function StudentListPage() {
     };
 
     const closeModal = () => { setModalState({ type: null, student: null }); setFormData(initialFormState); setMessage(''); };
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { const { id, value } = e.target; setFormData(prev => ({ ...prev, [id]: value })); };
+    
+    // UPDATED FUNCTION: Automatically converts all form input fields to uppercase
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { 
+        const { id, value } = e.target; 
+        setFormData(prev => ({ ...prev, [id]: value.toUpperCase() })); 
+    };
 
-    // --- HANDLE SELECTION ---
     const handleToggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
             const allIds = new Set(filteredStudents.map(s => s.student_id));
@@ -394,7 +398,6 @@ export default function StudentListPage() {
         setSelectedStudentIds(newSet);
     };
 
-    // --- HANDLE ADD STUDENT ---
     const handleAddStudent = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -424,7 +427,6 @@ export default function StudentListPage() {
         setLoading(false);
     };
 
-    // --- HANDLE SINGLE DELETE ---
     const handleDeleteStudent = async () => {
         if (!modalState.student) return;
         setLoading(true);
@@ -439,7 +441,6 @@ export default function StudentListPage() {
         setLoading(false);
     };
 
-    // --- HANDLE BULK DELETE ---
     const handleBulkDelete = async () => {
         if (selectedStudentIds.size === 0) return;
         setLoading(true);
@@ -575,7 +576,6 @@ export default function StudentListPage() {
                             </div>
                             
                             <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap lg:flex-nowrap">
-                                {/* BULK DELETE BUTTON (Dynamic) */}
                                 {selectedStudentIds.size > 0 && (
                                     <Button variant="danger" onClick={() => handleSecureAction(openBulkDeleteModal)} className="col-span-2 w-full sm:w-auto animate-in fade-in zoom-in duration-200">
                                         <Trash2 size={16} className="mr-2" />
@@ -676,7 +676,7 @@ export default function StudentListPage() {
 
             <Modal isOpen={modalState.type === 'add' || modalState.type === 'edit'} onClose={closeModal} title={modalState.type === 'add' ? 'Add New Student' : 'Edit Student'}>
                 <form onSubmit={modalState.type === 'add' ? handleAddStudent : handleUpdateStudent} className="space-y-4">
-                    <Input label="Full Name (Format: Lastname, Firstname MI)" id="full_name" type="text" required value={formData.full_name} onChange={handleFormChange} placeholder="e.g. Maglangit, Christian B." />
+                    <Input label="Full Name (Format: Lastname, Firstname MI)" id="full_name" type="text" required value={formData.full_name} onChange={handleFormChange} placeholder="E.G. MAGLANGIT, CHRISTIAN B." />
                     <Input label="ID Number" id="student_id" type="text" required value={formData.student_id} onChange={handleFormChange} disabled={modalState.type === 'edit'} />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Select label="Gender" id="gender" required options={genderOptions} value={formData.gender} onChange={handleFormChange} />
