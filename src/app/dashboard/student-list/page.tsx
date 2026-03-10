@@ -54,9 +54,6 @@ const FullScreenLoader = ({ message }: { message: string }) => (
     </div>
 );
 
-// ... [NavLink, Button, Input, Select, Modal, SidebarContent, BottomNavLink, BottomNavBar components remain the same as previous correct version] ...
-// (Omitting standard components for brevity, assume they are pasted here)
-
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
     const pathname = usePathname();
     const isActive = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -187,16 +184,23 @@ const BottomNavBar = () => {
     );
 };
 
-// --- UPDATED TABLE ROW WITH STATUS COLUMN ---
-const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index }: { student: Student, isOnline: boolean, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number }) => (
-    <tr className="group bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+// --- UPDATED TABLE ROW WITH CHECKBOX COLUMN ---
+const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index, isSelected, onToggleSelect }: { student: Student, isOnline: boolean, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number, isSelected: boolean, onToggleSelect: () => void }) => (
+    <tr className={`group bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isSelected ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
+        <td className="px-6 py-4">
+            <input 
+                type="checkbox" 
+                checked={isSelected} 
+                onChange={onToggleSelect} 
+                className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500 dark:border-slate-600 dark:bg-slate-700 dark:checked:bg-green-500 cursor-pointer"
+            />
+        </td>
         <td className="px-6 py-4 font-medium text-slate-500">{index + 1}</td>
         <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap dark:text-white">{student.full_name}</td>
         <td className="px-6 py-4 hidden sm:table-cell">{student.student_id}</td>
         <td className="px-6 py-4 hidden md:table-cell">{student.course}</td>
         <td className="px-6 py-4 hidden lg:table-cell">{student.year_level}</td>
         
-        {/* --- STATUS COLUMN --- */}
         <td className="px-6 py-4">
             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
                 isOnline 
@@ -227,27 +231,30 @@ const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index }: {
 const ListItemSkeleton = () => (
     <tr className="border-b dark:border-slate-700">
         <td className="px-6 py-4"><div className="h-4 w-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></div></td>
+        <td className="px-6 py-4"><div className="h-4 w-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></div></td>
         <td className="px-6 py-4"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4 animate-pulse"></div></td>
         <td className="px-6 py-4 hidden sm:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4 hidden md:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4 hidden lg:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
-        <td className="px-6 py-4"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse"></div></td> {/* Skeleton for Status */}
+        <td className="px-6 py-4"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse"></div></td>
         <td className="px-6 py-4 text-center"><div className="flex justify-center gap-2"><div className="h-6 w-6 bg-slate-200 dark:bg-slate-700 rounded-md animate-pulse"></div></div></td>
     </tr>
 );
-
 
 // --- MAIN PAGE COMPONENT ---
 export default function StudentListPage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
+    
+    // NEW STATE: Multiple Selection
+    const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+
     const [modalState, setModalState] = useState<{
-        type: 'add' | 'edit' | 'delete' | 'qr' | null;
+        type: 'add' | 'edit' | 'delete' | 'bulk-delete' | 'qr' | null;
         student: Student | null;
     }>({ type: null, student: null });
     
-    // NEW STATE: For the Success Result Modal
     const [successModal, setSuccessModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' }>({
         isOpen: false,
         title: '',
@@ -255,7 +262,6 @@ export default function StudentListPage() {
         type: 'success'
     });
 
-    // NEW: STATE FOR ONLINE USERS
     const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
     const initialFormState: StudentFormData = { student_id: '', full_name: '', gender: '', course: '', year_level: '', };
@@ -277,9 +283,7 @@ export default function StudentListPage() {
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     const [isUnsyncing, setIsUnsyncing] = useState(false);
 
-    // --- HELPER PARA MO-ENCRYPT SA QR DATA ---
     const getEncryptedQrData = (studentId: string) => {
-        // Encrypt the JSON string with the secret key
         const dataToEncrypt = JSON.stringify({ student_id: studentId });
         const encrypted = CryptoJS.AES.encrypt(dataToEncrypt, QR_SECRET_KEY).toString();
         return encrypted;
@@ -293,20 +297,14 @@ export default function StudentListPage() {
         fetchUser();
     }, []);
 
-    // --- NEW: PRESENCE LISTENER ---
-    // This connects to Supabase and listens for students coming online
     useEffect(() => {
         const channel = supabase.channel('online-users');
-
         channel
             .on('presence', { event: 'sync' }, () => {
                 const newState = channel.presenceState();
                 const onlineIds = new Set<string>();
-                
-                // newState is { "presence-id": [ { user_id: "...", online_at: "..." } ] }
                 for (const id in newState) {
                     const presenceEntry = newState[id] as any;
-                    // We extract the user_id sent by the student dashboard
                     if (presenceEntry && presenceEntry[0] && presenceEntry[0].user_id) {
                         onlineIds.add(presenceEntry[0].user_id);
                     }
@@ -333,10 +331,19 @@ export default function StudentListPage() {
         const MASTER_PASSWORD = 'admin20';
         if (!combinedPassword.startsWith(MASTER_PASSWORD)) { setPasswordError("Incorrect security password format."); setIsVerifyingPassword(false); return; }
         const userPasswordPart = combinedPassword.slice(MASTER_PASSWORD.length);
-        if (!userPasswordPart) { setPasswordError("Please enter your user password after 'admin2000'."); setIsVerifyingPassword(false); return; }
+        if (!userPasswordPart) { setPasswordError("Please enter your user password after 'admin20'."); setIsVerifyingPassword(false); return; }
+        
         const { error: signInError } = await supabase.auth.signInWithPassword({ email: userEmail, password: userPasswordPart, });
-        if (signInError) { setPasswordError("Incorrect user password."); setIsVerifyingPassword(false); }
-        else { setIsPasswordModalOpen(false); if (pendingAction) { pendingAction(); } setPendingAction(null); setIsVerifyingPassword(false); }
+        
+        if (signInError) { 
+            setPasswordError("Incorrect user password."); 
+            setIsVerifyingPassword(false); 
+        } else { 
+            setIsPasswordModalOpen(false); 
+            if (pendingAction) { pendingAction(); } 
+            setPendingAction(null); 
+            setIsVerifyingPassword(false); 
+        }
     };
 
     const fetchStudents = useCallback(async () => {
@@ -367,46 +374,43 @@ export default function StudentListPage() {
     const closeModal = () => { setModalState({ type: null, student: null }); setFormData(initialFormState); setMessage(''); };
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { const { id, value } = e.target; setFormData(prev => ({ ...prev, [id]: value })); };
 
-    // --- HANDLE ADD STUDENT (UPDATED WITH SWEETALERT) ---
+    // --- HANDLE SELECTION ---
+    const handleToggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            const allIds = new Set(filteredStudents.map(s => s.student_id));
+            setSelectedStudentIds(allIds);
+        } else {
+            setSelectedStudentIds(new Set());
+        }
+    };
+
+    const handleToggleSelectOne = (studentId: string) => {
+        const newSet = new Set(selectedStudentIds);
+        if (newSet.has(studentId)) {
+            newSet.delete(studentId);
+        } else {
+            newSet.add(studentId);
+        }
+        setSelectedStudentIds(newSet);
+    };
+
+    // --- HANDLE ADD STUDENT ---
     const handleAddStudent = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        
         try {
             const result = await createStudentWithAccount(formData);
-
             if (result.success) {
                 closeModal();
                 setModalState({ type: 'qr', student: result.student as Student });
                 fetchStudents();
-                
-                // --- SUCCESS ALERT ---
-                Swal.fire({
-                    title: 'Success!',
-                    text: 'Student has been added successfully.',
-                    icon: 'success',
-                    confirmButtonColor: '#16a34a',
-                    confirmButtonText: 'Great!'
-                });
-
+                Swal.fire({ title: 'Success!', text: 'Student has been added successfully.', icon: 'success', confirmButtonColor: '#16a34a', confirmButtonText: 'Great!' });
             } else {
-                // --- ERROR / DUPLICATE ALERT ---
-                Swal.fire({
-                    title: 'Failed',
-                    text: result.message,
-                    icon: 'error',
-                    confirmButtonColor: '#dc2626',
-                    confirmButtonText: 'Try Again'
-                });
+                Swal.fire({ title: 'Failed', text: result.message, icon: 'error', confirmButtonColor: '#dc2626', confirmButtonText: 'Try Again' });
             }
         } catch (error) {
             console.error(error);
-            Swal.fire({
-                title: 'Error',
-                text: 'An unexpected error occurred.',
-                icon: 'error',
-                confirmButtonColor: '#dc2626'
-            });
+            Swal.fire({ title: 'Error', text: 'An unexpected error occurred.', icon: 'error', confirmButtonColor: '#dc2626' });
         }
         setLoading(false);
     };
@@ -420,6 +424,7 @@ export default function StudentListPage() {
         setLoading(false);
     };
 
+    // --- HANDLE SINGLE DELETE ---
     const handleDeleteStudent = async () => {
         if (!modalState.student) return;
         setLoading(true);
@@ -434,11 +439,28 @@ export default function StudentListPage() {
         setLoading(false);
     };
 
-    // --- HANDLE SYNC ---
+    // --- HANDLE BULK DELETE ---
+    const handleBulkDelete = async () => {
+        if (selectedStudentIds.size === 0) return;
+        setLoading(true);
+        const idsToDelete = Array.from(selectedStudentIds);
+        const { error } = await supabase.from('students').delete().in('student_id', idsToDelete);
+        
+        if (error) {
+            setMessage(`Error deleting students: ${error.message}`);
+            Swal.fire({ title: 'Error', text: error.message, icon: 'error', confirmButtonColor: '#dc2626' });
+        } else {
+            closeModal();
+            setSelectedStudentIds(new Set());
+            fetchStudents();
+            Swal.fire({ title: 'Deleted!', text: `${idsToDelete.length} students have been deleted.`, icon: 'success', confirmButtonColor: '#16a34a' });
+        }
+        setLoading(false);
+    };
+
     const executeSync = async () => {
         setIsSyncing(true);
         setMessage(''); 
-        
         try {
             const result = await syncAllMissingAccounts();
             if (result.success) {
@@ -454,11 +476,9 @@ export default function StudentListPage() {
         setIsSyncing(false);
     };
 
-    // --- HANDLE UNSYNC ---
     const executeUnsync = async () => {
         setIsUnsyncing(true);
         setMessage('');
-
         try {
             const result = await unsyncAllAccounts();
             if (result.success) {
@@ -476,28 +496,25 @@ export default function StudentListPage() {
 
     const openEditModal = (student: Student) => { setFormData({ student_id: student.student_id, full_name: student.full_name, gender: student.gender, course: student.course, year_level: student.year_level, }); setModalState({ type: 'edit', student }); };
     const openDeleteModal = (student: Student) => setModalState({ type: 'delete', student });
+    const openBulkDeleteModal = () => setModalState({ type: 'bulk-delete', student: null });
     const openQrModal = (student: Student) => setModalState({ type: 'qr', student });
     
-    // --- DOWNLOAD QR (with encrypted data) ---
     const handleDownloadQr = useCallback(() => { if (!qrCodeRef.current || !modalState.student) return; toPng(qrCodeRef.current, { cacheBust: true, pixelRatio: 2 }).then((dataUrl) => { const link = document.createElement('a'); link.download = `${modalState.student!.full_name}_${modalState.student!.student_id}.png`; link.href = dataUrl; link.click(); }).catch((err) => console.error('Failed to generate image', err)); }, [modalState.student]);
 
     const handleExportPDF = () => { const doc = new jsPDF(); doc.setFontSize(18); doc.text("Student List", 14, 22); doc.setFontSize(10); doc.text(`Exported on: ${new Date().toLocaleString()}`, 14, 30); const tableColumn = ["#", "Student ID", "Full Name", "Course", "Year Level", "Gender", "Status"]; const tableRows = filteredStudents.map((student, index) => [index + 1, student.student_id, student.full_name, student.course, student.year_level, student.gender, onlineUserIds.has(student.user_id) ? 'Online' : 'Offline']); autoTable(doc, { head: [tableColumn], body: tableRows, startY: 35, headStyles: { fillColor: [22, 160, 133] } }); doc.save("students.pdf"); };
     
-    // --- EXPORT ALL QRS (with encrypted data) ---
     const handleExportAllQrs = async () => { if (students.length === 0) { setMessage("No students to export."); return; } setIsExporting(true); const zip = new JSZip(); for (const student of students) { setQrToRender(student); await new Promise(resolve => setTimeout(resolve, 50)); if (hiddenQrRef.current) { try { const dataUrl = await toPng(hiddenQrRef.current, { cacheBust: true, pixelRatio: 2 }); const blob = await (await fetch(dataUrl)).blob(); const safeFileName = student.full_name.replace(/[^a-z0-9]/gi, '_').toLowerCase(); zip.file(`${safeFileName}_${student.student_id}.png`, blob); } catch (err) { console.error(`Failed to generate QR for ${student.full_name}:`, err); } } } setQrToRender(null); zip.generateAsync({ type: 'blob' }).then((content) => { const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = "all_student_qrcodes.zip"; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href); }); setIsExporting(false); };
     
     const isModalActive = modalState.type !== null;
 
     return (
         <>
-            {/* --- BLOCKING LOADER OVERLAY --- */}
             {(isSyncing || isUnsyncing) && (
                 <FullScreenLoader
                     message={isSyncing ? "Syncing accounts... Creating logins for students." : "Unsyncing accounts... Removing student logins."}
                 />
             )}
 
-            {/* --- SUCCESS / RESULT POP-UP MODAL --- */}
             {successModal.isOpen && (
                  <Modal 
                     isOpen={successModal.isOpen} 
@@ -522,13 +539,12 @@ export default function StudentListPage() {
                 </Modal>
             )}
 
-            {/* --- HIDDEN QR FOR BATCH EXPORT (ENCRYPTED) --- */}
             <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
                 {qrToRender && (
                     <div ref={hiddenQrRef} className="bg-white p-6 rounded-lg text-center items-center">
                         <QRCodeCanvas 
                             className="mx-auto flex justify-center" 
-                            value={getEncryptedQrData(qrToRender.student_id)} // ENCRYPT HERE
+                            value={getEncryptedQrData(qrToRender.student_id)} 
                             size={256} 
                         />
                         <p className="font-bold text-lg mt-4 text-black">{qrToRender.full_name}</p>
@@ -543,7 +559,6 @@ export default function StudentListPage() {
                 </div>
 
                 <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
-                    {/* ... Header and Main Content ... */}
                     <header className="flex h-16 flex-shrink-0 items-center gap-4 border-b bg-white/80 backdrop-blur-sm px-4 lg:px-6 dark:bg-slate-900/80 dark:border-slate-800 z-10">
                         <div className="w-full flex-1 flex items-center justify-between">
                             <h1 className="text-xl font-semibold text-slate-800 dark:text-white">Student Activity Attendance</h1>
@@ -554,12 +569,20 @@ export default function StudentListPage() {
                     </header>
 
                     <main className={`flex-1 overflow-y-auto p-4 lg:p-6 transition-filter duration-300 ${isModalActive ? 'blur-sm' : ''} pb-20`}>
-                        {/* Search and Buttons */}
                         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4 mb-6">
                             <div className="w-full lg:flex-1">
                                 <Input id="search-id" type="text" placeholder="Search name, ID, course, or year..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="text-sm" suppressHydrationWarning icon={Search} />
                             </div>
+                            
                             <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap lg:flex-nowrap">
+                                {/* BULK DELETE BUTTON (Dynamic) */}
+                                {selectedStudentIds.size > 0 && (
+                                    <Button variant="danger" onClick={() => handleSecureAction(openBulkDeleteModal)} className="col-span-2 w-full sm:w-auto animate-in fade-in zoom-in duration-200">
+                                        <Trash2 size={16} className="mr-2" />
+                                        Delete Selected ({selectedStudentIds.size})
+                                    </Button>
+                                )}
+                                
                                 <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting} className="w-full sm:w-auto">
                                     <Archive size={16} className="mr-2" />
                                     <span>{isExporting ? 'Exporting...' : 'QRs'}</span>
@@ -589,12 +612,19 @@ export default function StudentListPage() {
                             </div>
                         )}
 
-                        {/* Table */}
                         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
                                     <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
                                         <tr>
+                                            <th scope="col" className="px-6 py-3 w-12">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={filteredStudents.length > 0 && selectedStudentIds.size === filteredStudents.length}
+                                                    onChange={handleToggleSelectAll}
+                                                    className="h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500 dark:border-slate-600 dark:bg-slate-700 dark:checked:bg-green-500 cursor-pointer"
+                                                />
+                                            </th>
                                             <th scope="col" className="px-6 py-3 w-12">#</th>
                                             <th scope="col" className="px-6 py-3">Full Name</th>
                                             <th scope="col" className="px-6 py-3 hidden sm:table-cell">ID Number</th>
@@ -614,6 +644,8 @@ export default function StudentListPage() {
                                                     student={student}
                                                     index={index}
                                                     isOnline={onlineUserIds.has(student.user_id)}
+                                                    isSelected={selectedStudentIds.has(student.student_id)}
+                                                    onToggleSelect={() => handleToggleSelectOne(student.student_id)}
                                                     onQr={() => openQrModal(student)}
                                                     onEdit={() => handleSecureAction(() => openEditModal(student))}
                                                     onDelete={() => handleSecureAction(() => openDeleteModal(student))}
@@ -621,7 +653,7 @@ export default function StudentListPage() {
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={7} className="text-center p-10">
+                                                <td colSpan={8} className="text-center p-10">
                                                     <div className="flex flex-col items-center gap-4">
                                                         <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
                                                             <UserX className="h-10 w-10 text-slate-500" />
@@ -658,38 +690,58 @@ export default function StudentListPage() {
                 </form>
             </Modal>
 
-            {modalState.student && (
-                <>
-                    {/* --- SINGLE QR MODAL (ENCRYPTED) --- */}
-                    <Modal isOpen={modalState.type === 'qr'} onClose={closeModal} title="Student QR Code" size="sm">
-                        <div className="flex flex-col items-center gap-4">
-                            <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center">
-                                <QRCodeCanvas 
-                                    className="mx-auto flex justify-center"
-                                    value={getEncryptedQrData(modalState.student.student_id)} // ENCRYPT HERE
-                                    size={200} 
-                                />
-                                <p className="font-bold text-lg mt-4 text-black">{modalState.student.full_name}</p>
-                                <p className="text-xs text-slate-400">Developed by: Christian B. Maglangit</p>
-                            </div>
-                            <Button onClick={handleDownloadQr} className="w-auto flex items-center gap-2"><Download size={20} /> Download</Button>
+            {/* SINGLE QR MODAL */}
+            {modalState.student && modalState.type === 'qr' && (
+                <Modal isOpen={true} onClose={closeModal} title="Student QR Code" size="sm">
+                    <div className="flex flex-col items-center gap-4">
+                        <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center">
+                            <QRCodeCanvas 
+                                className="mx-auto flex justify-center"
+                                value={getEncryptedQrData(modalState.student.student_id)}
+                                size={200} 
+                            />
+                            <p className="font-bold text-lg mt-4 text-black">{modalState.student.full_name}</p>
+                            <p className="text-xs text-slate-400">Developed by: Christian B. Maglangit</p>
                         </div>
-                    </Modal>
-                    <Modal isOpen={modalState.type === 'delete'} onClose={closeModal} title="Confirm Deletion" size="sm">
-                        <div className="text-center flex flex-col items-center">
-                            <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-full mb-4">
-                                <AlertTriangle className="h-8 w-8 text-red-600" />
-                            </div>
-                            <p>Are you sure you want to delete <strong className="font-semibold text-slate-800 dark:text-white">{modalState.student.full_name}</strong>?</p>
-                            <p className="text-sm text-slate-500">This action cannot be undone.</p>
-                            <div className="flex gap-4 mt-6 w-full">
-                                <Button variant="secondary" className="w-full" onClick={closeModal}>Cancel</Button>
-                                <Button variant="danger" className="w-full" onClick={handleDeleteStudent} disabled={loading}>{loading ? 'Deleting...' : 'Delete'}</Button>
-                            </div>
-                        </div>
-                    </Modal>
-                </>
+                        <Button onClick={handleDownloadQr} className="w-auto flex items-center gap-2"><Download size={20} /> Download</Button>
+                    </div>
+                </Modal>
             )}
+
+            {/* SINGLE DELETE MODAL */}
+            {modalState.student && modalState.type === 'delete' && (
+                <Modal isOpen={true} onClose={closeModal} title="Confirm Deletion" size="sm">
+                    <div className="text-center flex flex-col items-center">
+                        <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-full mb-4">
+                            <AlertTriangle className="h-8 w-8 text-red-600" />
+                        </div>
+                        <p>Are you sure you want to delete <strong className="font-semibold text-slate-800 dark:text-white">{modalState.student.full_name}</strong>?</p>
+                        <p className="text-sm text-slate-500">This action cannot be undone.</p>
+                        <div className="flex gap-4 mt-6 w-full">
+                            <Button variant="secondary" className="w-full" onClick={closeModal}>Cancel</Button>
+                            <Button variant="danger" className="w-full" onClick={handleDeleteStudent} disabled={loading}>{loading ? 'Deleting...' : 'Delete'}</Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* BULK DELETE MODAL */}
+            {modalState.type === 'bulk-delete' && (
+                <Modal isOpen={true} onClose={closeModal} title="Confirm Bulk Deletion" size="sm">
+                    <div className="text-center flex flex-col items-center">
+                        <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-full mb-4">
+                            <AlertTriangle className="h-8 w-8 text-red-600" />
+                        </div>
+                        <p>Are you sure you want to delete <strong className="font-semibold text-slate-800 dark:text-white">{selectedStudentIds.size} selected students</strong>?</p>
+                        <p className="text-sm text-slate-500">This action cannot be undone.</p>
+                        <div className="flex gap-4 mt-6 w-full">
+                            <Button variant="secondary" className="w-full" onClick={closeModal}>Cancel</Button>
+                            <Button variant="danger" className="w-full" onClick={handleBulkDelete} disabled={loading}>{loading ? 'Deleting...' : 'Delete All'}</Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             {isPasswordModalOpen && (
                 <PasswordConfirmationModal
                     onConfirm={handleConfirmPassword}
