@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import {
     LayoutDashboard, Users, ClipboardList, QrCode, LogOut, X, UserCheck, Download, UserPlus, Edit, Trash2, Search, Archive, AlertTriangle, UserX, MoreHorizontal,
-    Activity, RefreshCw, UserMinus, Loader2, CheckCircle, XCircle
+    Activity, RefreshCw, UserMinus, Loader2, CheckCircle, XCircle, MessageSquare, Send, Megaphone
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { toPng } from 'html-to-image';
@@ -34,6 +34,14 @@ type Student = {
 };
 
 type StudentFormData = Omit<Student, 'created_at' | 'user_id'>;
+
+type ChatMessage = {
+    id: number;
+    conversation_id: string;
+    sender_id: string;
+    content: string;
+    created_at: string;
+};
 
 // --- FULL SCREEN LOADER COMPONENT ---
 const FullScreenLoader = ({ message }: { message: string }) => (
@@ -184,7 +192,7 @@ const BottomNavBar = () => {
     );
 };
 
-const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index, isSelected, onToggleSelect }: { student: Student, isOnline: boolean, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number, isSelected: boolean, onToggleSelect: () => void }) => (
+const StudentListItem = ({ student, isOnline, unreadCount, onChat, onQr, onEdit, onDelete, index, isSelected, onToggleSelect }: { student: Student, isOnline: boolean, unreadCount: number, onChat: () => void, onQr: () => void, onEdit: () => void, onDelete: () => void, index: number, isSelected: boolean, onToggleSelect: () => void }) => (
     <tr className={`group bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isSelected ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
         <td className="px-6 py-4">
             <input 
@@ -216,9 +224,18 @@ const StudentListItem = ({ student, isOnline, onQr, onEdit, onDelete, index, isS
 
         <td className="px-6 py-4">
             <div className="flex justify-center items-center gap-1">
-                <button onClick={onQr} className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><QrCode size={18} /></button>
-                <button onClick={onEdit} className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><Edit size={18} /></button>
-                <button onClick={onDelete} className="p-2 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-slate-800"><Trash2 size={18} /></button>
+                {/* --- CHAT BUTTON WITH UNREAD BADGE --- */}
+                <button onClick={onChat} title="Chat with Student" className="relative p-2 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-800">
+                    <MessageSquare size={18} />
+                    {unreadCount > 0 && (
+                        <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[9px] font-bold leading-none text-red-100 bg-red-600 rounded-full transform translate-x-1/4 -translate-y-1/4">
+                            {unreadCount}
+                        </span>
+                    )}
+                </button>
+                <button onClick={onQr} title="Generate QR" className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><QrCode size={18} /></button>
+                <button onClick={onEdit} title="Edit Student" className="p-2 rounded-md text-slate-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-slate-800"><Edit size={18} /></button>
+                <button onClick={onDelete} title="Delete Student" className="p-2 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-slate-800"><Trash2 size={18} /></button>
             </div>
             <div className="flex justify-center md:hidden group-hover:opacity-0">
                 <MoreHorizontal size={20} className="text-slate-400" />
@@ -236,7 +253,7 @@ const ListItemSkeleton = () => (
         <td className="px-6 py-4 hidden md:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4 hidden lg:table-cell"><div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full animate-pulse"></div></td>
         <td className="px-6 py-4"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse"></div></td>
-        <td className="px-6 py-4 text-center"><div className="flex justify-center gap-2"><div className="h-6 w-6 bg-slate-200 dark:bg-slate-700 rounded-md animate-pulse"></div></div></td>
+        <td className="px-6 py-4 text-center"><div className="flex justify-center gap-2"><div className="h-6 w-24 bg-slate-200 dark:bg-slate-700 rounded-md animate-pulse"></div></div></td>
     </tr>
 );
 
@@ -261,6 +278,24 @@ export default function StudentListPage() {
 
     const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
+    // CHAT STATE
+    const [chatModalOpen, setChatModalOpen] = useState(false);
+    const [activeChatStudent, setActiveChatStudent] = useState<Student | null>(null);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [newChatMessage, setNewChatMessage] = useState('');
+    const [isSendingMessage, setIsSendingMessage] = useState(false);
+    const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
+    
+    // BROADCAST STATE
+    const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+    const [broadcastMessage, setBroadcastMessage] = useState('');
+    const [isBroadcasting, setIsBroadcasting] = useState(false);
+
+    // REFS FOR REALTIME SYNC (To avoid dependency stale closures)
+    const activeChatStudentRef = useRef<Student | null>(null);
+    const chatModalOpenRef = useRef<boolean>(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
     const initialFormState: StudentFormData = { student_id: '', full_name: '', gender: '', course: '', year_level: '', };
     const [formData, setFormData] = useState<StudentFormData>(initialFormState);
     const [loading, setLoading] = useState(true);
@@ -272,7 +307,6 @@ export default function StudentListPage() {
     const [qrToRender, setQrToRender] = useState<Student | null>(null);
     const router = useRouter();
     
-    // UPDATED OPTIONS TO BE ALL CAPS
     const genderOptions = ['MALE', 'FEMALE'];
     const yearLevelOptions = ['1ST YEAR', '2ND YEAR', '3RD YEAR', '4TH YEAR'];
     
@@ -280,6 +314,7 @@ export default function StudentListPage() {
     const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
     const [passwordError, setPasswordError] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string | null>(null);
+    const [adminId, setAdminId] = useState<string | null>(null); 
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     const [isUnsyncing, setIsUnsyncing] = useState(false);
 
@@ -292,11 +327,58 @@ export default function StudentListPage() {
     useEffect(() => {
         const fetchUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) setUserEmail(user.email || null);
+            if (user) {
+                setUserEmail(user.email || null);
+                setAdminId(user.id);
+            }
         };
         fetchUser();
     }, []);
 
+    // Update Refs for the real-time listener to always have the latest state
+    useEffect(() => {
+        activeChatStudentRef.current = activeChatStudent;
+        chatModalOpenRef.current = chatModalOpen;
+    }, [activeChatStudent, chatModalOpen]);
+
+    // --- SINGLE REAL-TIME LISTENER FOR ALL MESSAGES ---
+    useEffect(() => {
+        if (!adminId) return;
+
+        const globalChatSub = supabase.channel('global_admin_chat')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages' },
+                (payload) => {
+                    const newMsg = payload.new as ChatMessage;
+                    
+                    // If the sender is the admin, do nothing (we handle it optimistically)
+                    if (newMsg.sender_id === adminId) return;
+
+                    const isOpen = chatModalOpenRef.current;
+                    const activeStudent = activeChatStudentRef.current;
+
+                    // Check if we are currently chatting with the person who sent this message
+                    if (isOpen && activeStudent?.user_id === newMsg.conversation_id) {
+                        // We are actively chatting with them, append the message instantly!
+                        setChatMessages(prev => [...prev, newMsg]);
+                    } else {
+                        // We are NOT chatting with them, increment their unread badge!
+                        setUnreadMessages(prev => ({
+                            ...prev,
+                            [newMsg.conversation_id]: (prev[newMsg.conversation_id] || 0) + 1
+                        }));
+                    }
+                }
+            ).subscribe();
+
+        return () => {
+            supabase.removeChannel(globalChatSub);
+        }
+    }, [adminId]);
+
+
+    // Online Presence
     useEffect(() => {
         const channel = supabase.channel('online-users');
         channel
@@ -317,6 +399,28 @@ export default function StudentListPage() {
             supabase.removeChannel(channel);
         };
     }, []);
+
+    // --- FETCH HISTORY WHEN CHAT OPENS ---
+    useEffect(() => {
+        if (!chatModalOpen || !activeChatStudent?.user_id) return;
+
+        const fetchMessages = async () => {
+            const { data } = await supabase
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', activeChatStudent.user_id)
+                .order('created_at', { ascending: true });
+            
+            if (data) setChatMessages(data);
+        };
+
+        fetchMessages();
+    }, [chatModalOpen, activeChatStudent]);
+
+    // Auto-scroll to the bottom of the chat
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages, chatModalOpen]);
 
     const handleSecureAction = (action: () => void) => {
         setPendingAction(() => action);
@@ -373,7 +477,6 @@ export default function StudentListPage() {
 
     const closeModal = () => { setModalState({ type: null, student: null }); setFormData(initialFormState); setMessage(''); };
     
-    // UPDATED FUNCTION: Automatically converts all form input fields to uppercase
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { 
         const { id, value } = e.target; 
         setFormData(prev => ({ ...prev, [id]: value.toUpperCase() })); 
@@ -396,6 +499,100 @@ export default function StudentListPage() {
             newSet.add(studentId);
         }
         setSelectedStudentIds(newSet);
+    };
+
+    // --- HANDLE CHAT MODAL TRIGGER ---
+    const handleChat = (student: Student) => {
+        if (!student.user_id) {
+            Swal.fire({ 
+                title: 'No Account', 
+                text: 'This student does not have an active account yet. Please sync accounts first.', 
+                icon: 'warning', 
+                confirmButtonColor: '#f59e0b' 
+            });
+            return;
+        }
+        
+        // Reset unread count for this student when opened
+        setUnreadMessages(prev => {
+            const updated = { ...prev };
+            delete updated[student.user_id];
+            return updated;
+        });
+
+        setActiveChatStudent(student);
+        setChatModalOpen(true);
+    };
+
+    // --- SEND MESSAGE FUNCTION ---
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newChatMessage.trim() || !activeChatStudent || !adminId) return;
+
+        setIsSendingMessage(true);
+
+        const msgContent = newChatMessage.trim();
+        // Optimistic UI Update (Show message instantly before DB confirms)
+        const optimisticMsg: ChatMessage = {
+            id: Date.now(), // Temporary ID
+            conversation_id: activeChatStudent.user_id,
+            sender_id: adminId,
+            content: msgContent,
+            created_at: new Date().toISOString()
+        };
+        
+        setChatMessages(prev => [...prev, optimisticMsg]);
+        setNewChatMessage(''); // Clear input instantly
+
+        const { error } = await supabase.from('messages').insert({
+            conversation_id: activeChatStudent.user_id,
+            sender_id: adminId,
+            content: msgContent
+        });
+
+        if (error) {
+            console.error("Error sending message:", error);
+            Swal.fire({ title: 'Error', text: 'Failed to send message.', icon: 'error' });
+            // Revert optimistic update on error
+            setChatMessages(prev => prev.filter(msg => msg.id !== optimisticMsg.id));
+        }
+
+        setIsSendingMessage(false);
+    };
+
+    // --- BROADCAST MESSAGE FUNCTION ---
+    const handleBroadcastMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!broadcastMessage.trim() || !adminId) return;
+
+        // Target only students CURRENTLY FILTERED in the table who have user_ids
+        const targetStudents = filteredStudents.filter(s => s.user_id);
+
+        if (targetStudents.length === 0) {
+            Swal.fire('No Accounts', 'None of the students currently listed have synced accounts to receive messages.', 'warning');
+            return;
+        }
+
+        setIsBroadcasting(true);
+
+        // Prepare the array of inserts
+        const inserts = targetStudents.map(student => ({
+            conversation_id: student.user_id,
+            sender_id: adminId,
+            content: broadcastMessage.trim()
+        }));
+
+        const { error } = await supabase.from('messages').insert(inserts);
+
+        if (error) {
+            console.error("Broadcast error:", error);
+            Swal.fire('Error', 'Failed to send broadcast message.', 'error');
+        } else {
+            Swal.fire('Sent!', `Message successfully broadcasted to ${targetStudents.length} student(s).`, 'success');
+            setIsBroadcastModalOpen(false);
+            setBroadcastMessage('');
+        }
+        setIsBroadcasting(false);
     };
 
     const handleAddStudent = async (e: React.FormEvent) => {
@@ -510,9 +707,13 @@ export default function StudentListPage() {
 
     return (
         <>
-            {(isSyncing || isUnsyncing) && (
+            {(isSyncing || isUnsyncing || isBroadcasting) && (
                 <FullScreenLoader
-                    message={isSyncing ? "Syncing accounts... Creating logins for students." : "Unsyncing accounts... Removing student logins."}
+                    message={
+                        isSyncing ? "Syncing accounts... Creating logins for students." 
+                        : isUnsyncing ? "Unsyncing accounts... Removing student logins."
+                        : "Broadcasting message to students..."
+                    }
                 />
             )}
 
@@ -583,6 +784,12 @@ export default function StudentListPage() {
                                     </Button>
                                 )}
                                 
+                                {/* --- BROADCAST BUTTON ADDED HERE --- */}
+                                <Button variant="secondary" onClick={() => setIsBroadcastModalOpen(true)} className="w-full sm:w-auto border-indigo-500 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-900">
+                                    <Megaphone size={16} className="mr-2" />
+                                    <span>Broadcast</span>
+                                </Button>
+
                                 <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting} className="w-full sm:w-auto">
                                     <Archive size={16} className="mr-2" />
                                     <span>{isExporting ? 'Exporting...' : 'QRs'}</span>
@@ -645,7 +852,9 @@ export default function StudentListPage() {
                                                     index={index}
                                                     isOnline={onlineUserIds.has(student.user_id)}
                                                     isSelected={selectedStudentIds.has(student.student_id)}
+                                                    unreadCount={unreadMessages[student.user_id] || 0}
                                                     onToggleSelect={() => handleToggleSelectOne(student.student_id)}
+                                                    onChat={() => handleChat(student)}
                                                     onQr={() => openQrModal(student)}
                                                     onEdit={() => handleSecureAction(() => openEditModal(student))}
                                                     onDelete={() => handleSecureAction(() => openDeleteModal(student))}
@@ -674,6 +883,7 @@ export default function StudentListPage() {
                 </div>
             </div>
 
+            {/* --- FORMS & MODALS --- */}
             <Modal isOpen={modalState.type === 'add' || modalState.type === 'edit'} onClose={closeModal} title={modalState.type === 'add' ? 'Add New Student' : 'Edit Student'}>
                 <form onSubmit={modalState.type === 'add' ? handleAddStudent : handleUpdateStudent} className="space-y-4">
                     <Input label="Full Name (Format: Lastname, Firstname MI)" id="full_name" type="text" required value={formData.full_name} onChange={handleFormChange} placeholder="E.G. MAGLANGIT, CHRISTIAN B." />
@@ -742,6 +952,7 @@ export default function StudentListPage() {
                 </Modal>
             )}
 
+            {/* PASSWORD CONFIRMATION */}
             {isPasswordModalOpen && (
                 <PasswordConfirmationModal
                     onConfirm={handleConfirmPassword}
@@ -750,6 +961,96 @@ export default function StudentListPage() {
                     error={passwordError}
                 />
             )}
+
+            {/* --- ADMIN CHAT MODAL --- */}
+            {chatModalOpen && activeChatStudent && (
+                <Modal 
+                    isOpen={true} 
+                    onClose={() => { setChatModalOpen(false); setActiveChatStudent(null); setChatMessages([]); }} 
+                    title={`Chat: ${activeChatStudent.full_name}`} 
+                    size="md"
+                >
+                    <div className="flex flex-col h-[60vh] max-h-[500px]">
+                        {/* Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700 custom-scrollbar">
+                            {chatMessages.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <MessageSquare size={32} className="mb-2 opacity-50" />
+                                    <p className="text-sm text-center">No messages yet.<br/>Send a message to start the conversation.</p>
+                                </div>
+                            ) : (
+                                chatMessages.map(msg => {
+                                    const isAdmin = msg.sender_id === adminId;
+                                    return (
+                                        <div key={msg.id} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
+                                            <span className="text-[10px] text-slate-400 mb-1 mx-1">
+                                                {isAdmin ? 'You (Admin)' : activeChatStudent.full_name}
+                                            </span>
+                                            <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm ${
+                                                isAdmin 
+                                                ? 'bg-green-600 text-white rounded-br-none' 
+                                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-bl-none text-slate-800 dark:text-white'
+                                            }`}>
+                                                {msg.content}
+                                            </div>
+                                            <span className="text-[9px] text-slate-400 mt-1 mx-1">
+                                                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                    )
+                                })
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+                        
+                        {/* Input Area */}
+                        <form onSubmit={handleSendMessage} className="mt-4 flex gap-2 shrink-0">
+                            <input
+                                type="text"
+                                value={newChatMessage}
+                                onChange={(e) => setNewChatMessage(e.target.value)}
+                                placeholder="Type a message..."
+                                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-full focus:outline-none focus:border-green-500 focus:bg-white focus:ring-1 focus:ring-green-500 dark:bg-slate-800 dark:border-slate-600 dark:focus:bg-slate-700 dark:text-white transition-colors"
+                                disabled={isSendingMessage}
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={!newChatMessage.trim() || isSendingMessage} 
+                                className="bg-green-600 text-white p-2 w-11 h-11 rounded-full flex items-center justify-center hover:bg-green-700 disabled:opacity-50 transition-all shrink-0"
+                            >
+                                {isSendingMessage ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="ml-0.5" />}
+                            </button>
+                        </form>
+                    </div>
+                </Modal>
+            )}
+
+            {/* --- BROADCAST MODAL --- */}
+            <Modal isOpen={isBroadcastModalOpen} onClose={() => setIsBroadcastModalOpen(false)} title="Broadcast Message" size="md">
+                <form onSubmit={handleBroadcastMessage} className="space-y-4">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                        Send a message to <strong>{filteredStudents.filter(s => s.user_id).length}</strong> synced students in the current view.
+                    </p>
+                    <textarea
+                        value={broadcastMessage}
+                        onChange={(e) => setBroadcastMessage(e.target.value)}
+                        placeholder="Type your announcement here..."
+                        className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-slate-800 dark:border-slate-600 dark:focus:bg-slate-700 dark:text-white transition-colors"
+                        rows={4}
+                        required
+                        disabled={isBroadcasting}
+                    />
+                    <div className="flex gap-3 mt-4">
+                        <Button variant="secondary" type="button" onClick={() => setIsBroadcastModalOpen(false)} className="flex-1" disabled={isBroadcasting}>
+                            Cancel
+                        </Button>
+                        <Button variant="primary" type="submit" className="flex-1" disabled={!broadcastMessage.trim() || isBroadcasting}>
+                            {isBroadcasting ? <><Loader2 size={16} className="animate-spin mr-2"/> Sending...</> : <><Send size={16} className="mr-2"/> Send to All</>}
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+
         </>
     );
 }

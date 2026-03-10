@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { LogOut, User, GraduationCap, Hash, ShieldCheck, KeyRound, UserCheck, X, Coins, CalendarCheck, AlertCircle, Loader2, QrCode, Download, AlertTriangle, Clock } from 'lucide-react';
+import { LogOut, User, GraduationCap, Hash, ShieldCheck, KeyRound, UserCheck, X, Coins, CalendarCheck, AlertCircle, Loader2, QrCode, Download, AlertTriangle, Clock, MessageSquare, Send } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react'; 
 import { toPng } from 'html-to-image';
 import CryptoJS from 'crypto-js'; 
@@ -12,7 +12,6 @@ import CryptoJS from 'crypto-js';
 const QR_SECRET_KEY = process.env.NEXT_PUBLIC_QR_SECRET || 'attendance-system-secure-key-2024';
 
 // --- SHARED COMPONENTS ---
-
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' }> = ({ children, className, variant = 'primary', ...props }) => {
     const base = 'inline-flex items-center justify-center text-center px-4 py-2 text-sm font-semibold rounded-lg shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all duration-150 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed';
     const styles = {
@@ -68,8 +67,15 @@ type FineBreakdown = {
     date?: string;
 };
 
-// --- MAIN PAGE ---
+type ChatMessage = {
+    id: number;
+    conversation_id: string;
+    sender_id: string;
+    content: string;
+    created_at: string;
+};
 
+// --- MAIN PAGE ---
 export default function StudentDashboard() {
     const router = useRouter();
     const [student, setStudent] = useState<any>(null);
@@ -92,7 +98,26 @@ export default function StudentDashboard() {
     const [showQrModal, setShowQrModal] = useState(false);
     const qrCodeRef = useRef<HTMLDivElement>(null);
 
-    // --- HELPER PARA MO-ENCRYPT SA QR DATA ---
+    // --- CHAT STATE ---
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [isSending, setIsSending] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll chat to bottom
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        if (isChatOpen) {
+            scrollToBottom();
+            setUnreadCount(0); // Reset unread when opened
+        }
+    }, [messages, isChatOpen]);
+
     const getEncryptedQrData = (studentId: string) => {
         if (!studentId) return "";
         const dataToEncrypt = JSON.stringify({ student_id: studentId });
@@ -100,15 +125,48 @@ export default function StudentDashboard() {
         return encrypted;
     };
 
-    // --- NEW: PRESENCE BROADCASTER ---
+    // --- CHAT: FETCH MESSAGES & SUBSCRIBE TO REAL-TIME ---
     useEffect(() => {
         if (!student || !student.user_id) return;
 
-        const channel = supabase.channel('online-users');
+        // 1. Fetch initial messages
+        const fetchMessages = async () => {
+            const { data, error } = await supabase
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', student.user_id)
+                .order('created_at', { ascending: true });
 
-        channel.subscribe(async (status) => {
+            if (!error && data) {
+                setMessages(data);
+            }
+        };
+
+        fetchMessages();
+
+        // 2. Subscribe to new incoming messages
+        const messageSubscription = supabase
+            .channel('custom-all-channel')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${student.user_id}` },
+                (payload) => {
+                    const newMsg = payload.new as ChatMessage;
+                    setMessages((prev) => [...prev, newMsg]);
+                    
+                    // Add unread badge if chat is closed and it's NOT from the student themselves
+                    if (!isChatOpen && newMsg.sender_id !== student.user_id) {
+                        setUnreadCount((prev) => prev + 1);
+                    }
+                }
+            )
+            .subscribe();
+
+        // 3. Presence Broadcaster
+        const presenceChannel = supabase.channel('online-users');
+        presenceChannel.subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                await channel.track({
+                await presenceChannel.track({
                     user_id: student.user_id,
                     online_at: new Date().toISOString(),
                 });
@@ -116,9 +174,10 @@ export default function StudentDashboard() {
         });
 
         return () => {
-            supabase.removeChannel(channel);
+            supabase.removeChannel(messageSubscription);
+            supabase.removeChannel(presenceChannel);
         };
-    }, [student]);
+    }, [student, isChatOpen]);
 
     // --- FETCH & CALCULATE ---
     useEffect(() => {
@@ -130,7 +189,6 @@ export default function StudentDashboard() {
                     return;
                 }
 
-                // 1. Get Student Details
                 const { data: studentData, error: stError } = await supabase
                     .from('students')
                     .select('*')
@@ -143,16 +201,13 @@ export default function StudentDashboard() {
                 }
                 setStudent(studentData);
 
-                // 2. Get Activities, Schedules, and My Attendance
                 const { data: activities } = await supabase.from('activities').select('*').order('start_date', { ascending: true });
                 const { data: schedules } = await supabase.from('activity_schedules').select('*');
-                
                 const { data: attendance } = await supabase
                     .from('attendance_report')
                     .select('*')
                     .eq('student_id', studentData.student_id); 
 
-                // 3. Calculate Fines
                 let calcTotalFines = 0;
                 let calcEventsJoined = 0;
                 const breakdownList: FineBreakdown[] = [];
@@ -238,6 +293,27 @@ export default function StudentDashboard() {
         fetchAndCalculate();
     }, [router]);
 
+    // --- SEND MESSAGE HANDLER ---
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMessage.trim() || !student) return;
+
+        setIsSending(true);
+        const { error } = await supabase.from('messages').insert({
+            conversation_id: student.user_id, // Grouping chat by the student's ID
+            sender_id: student.user_id,       // The student is sending it
+            content: newMessage.trim(),
+        });
+
+        if (error) {
+            console.error("Error sending message:", error);
+            alert("Failed to send message.");
+        } else {
+            setNewMessage('');
+        }
+        setIsSending(false);
+    };
+
     const handleLogout = async () => {
         await supabase.auth.signOut();
         router.push('/');
@@ -274,7 +350,6 @@ export default function StudentDashboard() {
             });
     };
 
-    // Helper for status badges
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'Upcoming':
@@ -322,12 +397,11 @@ export default function StudentDashboard() {
 
             {/* --- MAIN CONTENT (SCROLLABLE) --- */}
             <main className="flex-1 overflow-y-auto p-4 lg:p-8">
-                <div className="max-w-6xl mx-auto flex flex-col gap-6">
+                <div className="max-w-6xl mx-auto flex flex-col gap-6 relative">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         
                         {/* LEFT COLUMN: Profile */}
                         <div className="lg:col-span-1 space-y-6">
-                            
                             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
                                 <div className="flex flex-col items-center text-center">
                                     <div className="h-24 w-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-700">
@@ -369,7 +443,6 @@ export default function StudentDashboard() {
 
                         {/* RIGHT COLUMN: Stats & Fines Table */}
                         <div className="lg:col-span-2 space-y-6">
-                            
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {/* --- QR CODE CARD --- */}
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
@@ -443,7 +516,7 @@ export default function StudentDashboard() {
                                     <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
                                         <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
                                             <tr>
-                                                <th className="px-6 py-3 min-w-[300px]">Activity Details</th> {/* Increased width here */}
+                                                <th className="px-6 py-3 min-w-[300px]">Activity Details</th>
                                                 <th className="px-6 py-3 text-center">Attendance</th>
                                                 <th className="px-6 py-3 text-right">Fine Amount</th>
                                             </tr>
@@ -455,39 +528,26 @@ export default function StudentDashboard() {
                                                     
                                                     return (
                                                         <tr key={index} className="bg-white border-b dark:bg-slate-900 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
-                                                            
-                                                            {/* --- UPDATED COLUMN: FLEX COL ACTIVITY DETAILS --- */}
                                                             <td className="px-6 py-4 align-top">
                                                                 <div className="flex flex-col gap-1 items-start">
-                                                                    {/* 1. Name */}
                                                                     <span className="font-medium text-slate-900 dark:text-white uppercase text-base">
                                                                         {item.activityName}
                                                                     </span>
-                                                                    
-                                                                    {/* 2. Date */}
                                                                     <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                                                          <Clock size={12} />
                                                                          {item.date 
                                                                              ? new Date(item.date).toLocaleDateString('en-US', {
-                                                                                 year: 'numeric',
-                                                                                 month: 'long',
-                                                                                 day: 'numeric'
-                                                                             })
-                                                                             : ''}
+                                                                                 year: 'numeric', month: 'long', day: 'numeric'
+                                                                             }) : ''}
                                                                     </div>
-
-                                                                    {/* 3. Type */}
                                                                     <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">
                                                                         {item.type.replace('_', ' ')}
                                                                     </span>
-
-                                                                    {/* 4. Status Badge */}
                                                                     <div className="mt-1">
                                                                          {getStatusBadge(item.activityStatus)}
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            
                                                             <td className="px-6 py-4 text-center align-middle">
                                                                 <span className={`px-2 py-1 rounded text-xs font-bold ${
                                                                     isComplete 
@@ -527,14 +587,106 @@ export default function StudentDashboard() {
                                     </table>
                                 </div>
                             </div>
-
                         </div>
                     </div>
                 </div>
             </main>
 
+            {/* --- FLOATING CHAT WIDGET --- */}
+            <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
+                {/* Chat Panel */}
+                {isChatOpen && (
+                    <div className="w-80 h-96 sm:w-96 sm:h-[28rem] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 mb-4 flex flex-col overflow-hidden animate-in slide-in-from-bottom-2 duration-200">
+                        {/* Header */}
+                        <div className="bg-green-600 p-4 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-2">
+                                <MessageSquare size={20} />
+                                <div>
+                                    <h3 className="font-bold text-sm">Admin Support</h3>
+                                    <p className="text-[10px] text-green-100">Send a message to the CSSO Officers</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsChatOpen(false)} className="text-green-100 hover:text-white rounded-full p-1 hover:bg-green-700 transition">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Messages Area */}
+                        <div className="flex-1 p-4 overflow-y-auto bg-slate-50 dark:bg-slate-950 flex flex-col gap-3">
+                            {messages.length === 0 ? (
+                                <div className="m-auto text-center text-slate-400 text-sm flex flex-col items-center">
+                                    <MessageSquare size={32} className="mb-2 opacity-50" />
+                                    <p>No messages yet.</p>
+                                    <p>Send a message to start chatting.</p>
+                                </div>
+                            ) : (
+                                messages.map((msg) => {
+                                    const isMe = msg.sender_id === student?.user_id;
+                                    return (
+                                        <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                            <span className="text-[10px] text-slate-400 mb-1 mx-1">
+                                                {isMe ? 'You' : 'Admin'}
+                                            </span>
+                                            <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm ${
+                                                isMe 
+                                                ? 'bg-green-600 text-white rounded-br-none' 
+                                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'
+                                            }`}>
+                                                {msg.content}
+                                            </div>
+                                            <span className="text-[9px] text-slate-400 mt-1 mx-1">
+                                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            </span>
+                                        </div>
+                                    )
+                                })
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
+                            <form onSubmit={handleSendMessage} className="flex gap-2 relative">
+                                <input 
+                                    type="text"
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    placeholder="Type a message..."
+                                    className="w-full bg-slate-100 dark:bg-slate-800 border-transparent focus:border-green-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-0 rounded-full pl-4 pr-12 py-2.5 text-sm dark:text-white transition-all"
+                                    disabled={isSending}
+                                />
+                                <button 
+                                    type="submit" 
+                                    disabled={!newMessage.trim() || isSending}
+                                    className="absolute right-1.5 top-1.5 bottom-1.5 aspect-square flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-full disabled:opacity-50 transition-all"
+                                >
+                                    {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} className="ml-0.5" />}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Floating Button */}
+                <button 
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className={`h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${
+                        isChatOpen ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                >
+                    {isChatOpen ? <X size={24} /> : <MessageSquare size={24} />}
+                    
+                    {/* Unread Badge */}
+                    {!isChatOpen && unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 h-6 w-6 bg-red-500 border-2 border-slate-50 rounded-full flex items-center justify-center text-[10px] font-bold">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                    )}
+                </button>
+            </div>
+
             {/* --- FIXED BOTTOM FOOTER --- */}
-            <footer className="shrink-0 py-3 text-center border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
+            <footer className="shrink-0 py-3 text-center border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10 relative">
                 <p className="text-xs text-slate-500 dark:text-slate-400"> 
                     Developed by: <strong>Christian B. Maglangit</strong> 
                 </p>
@@ -601,14 +753,12 @@ export default function StudentDashboard() {
                 <div className="flex flex-col items-center gap-6">
                     <div className="text-center">
                         <p className="text-sm text-slate-500 mb-2">Scan this code to record attendance</p>
-                        {/* Added 'flex flex-col items-center' here to force centering */}
                         <div ref={qrCodeRef} className="bg-white p-6 rounded-lg text-center flex flex-col items-center justify-center shadow-sm border border-slate-100 dark:border-slate-700">
                             <QRCodeCanvas 
                                 value={getEncryptedQrData(student?.student_id)} 
                                 size={200} 
                                 level={"H"}
                             />
-                            {/* Hidden text in UI but visible in downloaded image for identification */}
                             <p className="font-bold text-lg mt-4 text-slate-800">{student?.full_name}</p>
                             <p className="text-xs text-slate-400">Developed by: Christian B. Maglangit</p>
                         </div>
