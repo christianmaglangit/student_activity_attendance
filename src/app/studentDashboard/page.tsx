@@ -125,6 +125,29 @@ export default function StudentDashboard() {
         return encrypted;
     };
 
+    // --- FUNCTION TO RENDER CLICKABLE LINKS ---
+    const formatMessageWithLinks = (text: string, isMe: boolean) => {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const parts = text.split(urlRegex);
+
+        return parts.map((part, index) => {
+            if (part.match(urlRegex)) {
+                return (
+                    <a 
+                        key={index} 
+                        href={part} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className={`underline font-semibold break-all ${isMe ? 'text-green-100 hover:text-white' : 'text-blue-600 dark:text-blue-400 hover:text-blue-800'}`}
+                    >
+                        {part}
+                    </a>
+                );
+            }
+            return part;
+        });
+    };
+
     // --- CHAT: FETCH MESSAGES & SUBSCRIBE TO REAL-TIME ---
     useEffect(() => {
         if (!student || !student.user_id) return;
@@ -189,6 +212,7 @@ export default function StudentDashboard() {
                     return;
                 }
 
+                // 1. Get Student Details
                 const { data: studentData, error: stError } = await supabase
                     .from('students')
                     .select('*')
@@ -201,13 +225,16 @@ export default function StudentDashboard() {
                 }
                 setStudent(studentData);
 
+                // 2. Get Activities, Schedules, and My Attendance
                 const { data: activities } = await supabase.from('activities').select('*').order('start_date', { ascending: true });
                 const { data: schedules } = await supabase.from('activity_schedules').select('*');
+                
                 const { data: attendance } = await supabase
                     .from('attendance_report')
                     .select('*')
                     .eq('student_id', studentData.student_id); 
 
+                // 3. Calculate Fines
                 let calcTotalFines = 0;
                 let calcEventsJoined = 0;
                 const breakdownList: FineBreakdown[] = [];
@@ -294,8 +321,8 @@ export default function StudentDashboard() {
     }, [router]);
 
     // --- SEND MESSAGE HANDLER ---
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSendMessage = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!newMessage.trim() || !student) return;
 
         setIsSending(true);
@@ -350,6 +377,7 @@ export default function StudentDashboard() {
             });
     };
 
+    // Helper for status badges
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'Upcoming':
@@ -402,6 +430,7 @@ export default function StudentDashboard() {
                         
                         {/* LEFT COLUMN: Profile */}
                         <div className="lg:col-span-1 space-y-6">
+                            
                             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
                                 <div className="flex flex-col items-center text-center">
                                     <div className="h-24 w-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-700">
@@ -443,6 +472,7 @@ export default function StudentDashboard() {
 
                         {/* RIGHT COLUMN: Stats & Fines Table */}
                         <div className="lg:col-span-2 space-y-6">
+                            
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {/* --- QR CODE CARD --- */}
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
@@ -627,12 +657,13 @@ export default function StudentDashboard() {
                                             <span className="text-[10px] text-slate-400 mb-1 mx-1">
                                                 {isMe ? 'You' : 'Admin'}
                                             </span>
-                                            <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm ${
+                                            {/* --- UPDATED FOR CLICKABLE LINKS AND WRAPPING --- */}
+                                            <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm break-words whitespace-pre-wrap ${
                                                 isMe 
                                                 ? 'bg-green-600 text-white rounded-br-none' 
-                                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-bl-none shadow-sm'
+                                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-bl-none'
                                             }`}>
-                                                {msg.content}
+                                                {formatMessageWithLinks(msg.content, isMe)}
                                             </div>
                                             <span className="text-[9px] text-slate-400 mt-1 mx-1">
                                                 {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -646,19 +677,33 @@ export default function StudentDashboard() {
 
                         {/* Input Area */}
                         <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
-                            <form onSubmit={handleSendMessage} className="flex gap-2 relative">
-                                <input 
-                                    type="text"
+                            {/* --- CHANGED TO TEXTAREA TO SUPPORT MULTI-LINE --- */}
+                            <form onSubmit={(e) => handleSendMessage(e)} className="flex gap-2 relative items-end">
+                                <textarea 
                                     value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    onChange={(e) => {
+                                        setNewMessage(e.target.value);
+                                        // Auto-resize magic
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                                    }}
+                                    onKeyDown={(e) => {
+                                        // Send on Enter, Next Line on Shift+Enter
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSendMessage();
+                                            e.currentTarget.style.height = 'auto'; // Reset height after sending
+                                        }
+                                    }}
                                     placeholder="Type a message..."
-                                    className="w-full bg-slate-100 dark:bg-slate-800 border-transparent focus:border-green-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-0 rounded-full pl-4 pr-12 py-2.5 text-sm dark:text-white transition-all"
+                                    className="w-full bg-slate-100 dark:bg-slate-800 border-transparent focus:border-green-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-0 rounded-2xl pl-4 pr-12 py-2.5 text-sm dark:text-white transition-all resize-none overflow-y-auto custom-scrollbar min-h-[44px] max-h-[120px]"
                                     disabled={isSending}
+                                    rows={1}
                                 />
                                 <button 
                                     type="submit" 
                                     disabled={!newMessage.trim() || isSending}
-                                    className="absolute right-1.5 top-1.5 bottom-1.5 aspect-square flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-full disabled:opacity-50 transition-all"
+                                    className="absolute right-1.5 bottom-1.5 aspect-square flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-full disabled:opacity-50 transition-all h-8 w-8"
                                 >
                                     {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} className="ml-0.5" />}
                                 </button>

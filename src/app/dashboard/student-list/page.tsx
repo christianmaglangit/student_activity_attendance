@@ -224,6 +224,7 @@ const StudentListItem = ({ student, isOnline, unreadCount, onChat, onQr, onEdit,
 
         <td className="px-6 py-4">
             <div className="flex justify-center items-center gap-1">
+                {/* --- CHAT BUTTON WITH UNREAD BADGE --- */}
                 <button onClick={onChat} title="Chat with Student" className="relative p-2 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-slate-800">
                     <MessageSquare size={18} />
                     {unreadCount > 0 && (
@@ -283,8 +284,6 @@ export default function StudentListPage() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [newChatMessage, setNewChatMessage] = useState('');
     const [isSendingMessage, setIsSendingMessage] = useState(false);
-    
-    // NOTIFICATIONS STATE
     const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
     const [showNotifications, setShowNotifications] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
@@ -325,6 +324,29 @@ export default function StudentListPage() {
         const dataToEncrypt = JSON.stringify({ student_id: studentId });
         const encrypted = CryptoJS.AES.encrypt(dataToEncrypt, QR_SECRET_KEY).toString();
         return encrypted;
+    };
+
+    // --- FUNCTION TO RENDER CLICKABLE LINKS ---
+    const formatMessageWithLinks = (text: string, isAdmin: boolean) => {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const parts = text.split(urlRegex);
+
+        return parts.map((part, index) => {
+            if (part.match(urlRegex)) {
+                return (
+                    <a 
+                        key={index} 
+                        href={part} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className={`underline font-semibold break-all ${isAdmin ? 'text-green-100 hover:text-white' : 'text-blue-600 dark:text-blue-400 hover:text-blue-800'}`}
+                    >
+                        {part}
+                    </a>
+                );
+            }
+            return part;
+        });
     };
 
     useEffect(() => {
@@ -544,8 +566,8 @@ export default function StudentListPage() {
     };
 
     // --- SEND MESSAGE FUNCTION ---
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSendMessage = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!newChatMessage.trim() || !activeChatStudent || !adminId) return;
 
         setIsSendingMessage(true);
@@ -1068,7 +1090,7 @@ export default function StudentListPage() {
                 >
                     <div className="flex flex-col h-[60vh] max-h-[500px]">
                         {/* Messages Area */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                             {chatMessages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                     <MessageSquare size={32} className="mb-2 opacity-50" />
@@ -1082,12 +1104,12 @@ export default function StudentListPage() {
                                             <span className="text-[10px] text-slate-400 mb-1 mx-1">
                                                 {isAdmin ? 'You (Admin)' : activeChatStudent.full_name}
                                             </span>
-                                            <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm ${
+                                            <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm break-words whitespace-pre-wrap [overflow-wrap:anywhere] ${
                                                 isAdmin 
                                                 ? 'bg-green-600 text-white rounded-br-none' 
                                                 : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-bl-none text-slate-800 dark:text-white'
                                             }`}>
-                                                {msg.content}
+                                                {formatMessageWithLinks(msg.content, isAdmin)}
                                             </div>
                                             <span className="text-[9px] text-slate-400 mt-1 mx-1">
                                                 {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1100,19 +1122,31 @@ export default function StudentListPage() {
                         </div>
                         
                         {/* Input Area */}
-                        <form onSubmit={handleSendMessage} className="mt-4 flex gap-2 shrink-0">
-                            <input
-                                type="text"
+                        <form onSubmit={(e) => handleSendMessage(e)} className="mt-4 flex gap-2 shrink-0 items-end">
+                            <textarea
                                 value={newChatMessage}
-                                onChange={(e) => setNewChatMessage(e.target.value)}
+                                onChange={(e) => {
+                                    setNewChatMessage(e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSendMessage();
+                                        e.currentTarget.style.height = 'auto';
+                                    }
+                                }}
                                 placeholder="Type a message..."
-                                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-full focus:outline-none focus:border-green-500 focus:bg-white focus:ring-1 focus:ring-green-500 dark:bg-slate-800 dark:border-slate-600 dark:focus:bg-slate-700 dark:text-white transition-colors"
+                                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-2xl focus:outline-none focus:border-green-500 focus:bg-white focus:ring-1 focus:ring-green-500 dark:bg-slate-800 dark:border-slate-600 dark:focus:bg-slate-700 dark:text-white transition-colors resize-none overflow-y-auto min-h-[44px] max-h-[120px] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
                                 disabled={isSendingMessage}
+                                rows={1}
                             />
                             <button 
-                                type="submit" 
+                                type="button" 
+                                onClick={(e) => handleSendMessage(e as any)}
                                 disabled={!newChatMessage.trim() || isSendingMessage} 
-                                className="bg-green-600 text-white p-2 w-11 h-11 rounded-full flex items-center justify-center hover:bg-green-700 disabled:opacity-50 transition-all shrink-0"
+                                className="bg-green-600 text-white p-2 w-11 h-11 rounded-full flex items-center justify-center hover:bg-green-700 disabled:opacity-50 transition-all shrink-0 mb-0.5"
                             >
                                 {isSendingMessage ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="ml-0.5" />}
                             </button>
@@ -1131,7 +1165,7 @@ export default function StudentListPage() {
                         value={broadcastMessage}
                         onChange={(e) => setBroadcastMessage(e.target.value)}
                         placeholder="Type your announcement here..."
-                        className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-slate-800 dark:border-slate-600 dark:focus:bg-slate-700 dark:text-white transition-colors"
+                        className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 dark:bg-slate-800 dark:border-slate-600 dark:focus:bg-slate-700 dark:text-white transition-colors resize-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
                         rows={4}
                         required
                         disabled={isBroadcasting}
