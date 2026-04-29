@@ -73,6 +73,7 @@ type ChatMessage = {
     sender_id: string;
     content: string;
     created_at: string;
+    is_read?: boolean; 
 };
 
 // --- MAIN PAGE ---
@@ -105,6 +106,11 @@ export default function StudentDashboard() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [isSending, setIsSending] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const isChatOpenRef = useRef(isChatOpen); 
+
+    useEffect(() => {
+        isChatOpenRef.current = isChatOpen;
+    }, [isChatOpen]);
 
     // Auto-scroll chat to bottom
     const scrollToBottom = () => {
@@ -114,7 +120,6 @@ export default function StudentDashboard() {
     useEffect(() => {
         if (isChatOpen) {
             scrollToBottom();
-            setUnreadCount(0); // Reset unread when opened
         }
     }, [messages, isChatOpen]);
 
@@ -177,9 +182,15 @@ export default function StudentDashboard() {
                     const newMsg = payload.new as ChatMessage;
                     setMessages((prev) => [...prev, newMsg]);
                     
-                    // Add unread badge if chat is closed and it's NOT from the student themselves
-                    if (!isChatOpen && newMsg.sender_id !== student.user_id) {
-                        setUnreadCount((prev) => prev + 1);
+                    // If message is from Admin
+                    if (newMsg.sender_id !== student.user_id) {
+                        if (isChatOpenRef.current) {
+                            // Chat is open, mark as read directly sa DB para di mag pile-up
+                            supabase.from('messages').update({ is_read: true }).eq('id', newMsg.id).then();
+                        } else {
+                            // Chat is closed, increment ang unread badge
+                            setUnreadCount((prev) => prev + 1);
+                        }
                     }
                 }
             )
@@ -200,7 +211,7 @@ export default function StudentDashboard() {
             supabase.removeChannel(messageSubscription);
             supabase.removeChannel(presenceChannel);
         };
-    }, [student, isChatOpen]);
+    }, [student]); 
 
     // --- FETCH & CALCULATE ---
     useEffect(() => {
@@ -225,6 +236,18 @@ export default function StudentDashboard() {
                 }
                 setStudent(studentData);
 
+                // --- FETCH UNREAD MESSAGES (Offline Tracking) ---
+                const { count, error: unreadError } = await supabase
+                    .from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('conversation_id', user.id)
+                    .neq('sender_id', user.id) 
+                    .or('is_read.eq.false,is_read.is.null'); 
+
+                if (!unreadError && count !== null) {
+                    setUnreadCount(count);
+                }
+
                 // 2. Get Activities, Schedules, and My Attendance
                 const { data: activities } = await supabase.from('activities').select('*').order('start_date', { ascending: true });
                 const { data: schedules } = await supabase.from('activity_schedules').select('*');
@@ -245,11 +268,10 @@ export default function StudentDashboard() {
 
                 if (activities && schedules && attendance) {
                     activities.forEach(act => {
-                        // --- ADDED: CHECK ELIGIBILITY ---
+                        // CHECK ELIGIBILITY
                         const targetYears = act.target_years;
                         let isEligible = true;
 
-                        // Check if activity has restricted year levels
                         if (targetYears && targetYears.length > 0) {
                             const studentYearStr = String(studentData.year_level);
                             const studentYearDigit = studentYearStr.match(/\d/)?.[0] || studentYearStr.trim().toLowerCase();
@@ -261,9 +283,7 @@ export default function StudentDashboard() {
                             });
                         }
 
-                        // Completely skip this activity if the student is not eligible
                         if (!isEligible) return; 
-                        // --------------------------------
 
                         const actScheds = schedules.filter(s => s.activity_id === act.id);
                         
@@ -340,6 +360,25 @@ export default function StudentDashboard() {
         fetchAndCalculate();
     }, [router]);
 
+    // --- TOGGLE CHAT & MARK AS READ ---
+    const toggleChat = async () => {
+        const willOpen = !isChatOpen;
+        setIsChatOpen(willOpen);
+
+        // Kung gi open ang chat ug naay unread
+        if (willOpen && unreadCount > 0 && student?.user_id) {
+            setUnreadCount(0); // Clear badge
+            
+            // Mark sa database as read
+            await supabase
+                .from('messages')
+                .update({ is_read: true })
+                .eq('conversation_id', student.user_id)
+                .neq('sender_id', student.user_id)
+                .or('is_read.eq.false,is_read.is.null');
+        }
+    };
+
     // --- SEND MESSAGE HANDLER ---
     const handleSendMessage = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -347,9 +386,10 @@ export default function StudentDashboard() {
 
         setIsSending(true);
         const { error } = await supabase.from('messages').insert({
-            conversation_id: student.user_id, // Grouping chat by the student's ID
-            sender_id: student.user_id,       // The student is sending it
+            conversation_id: student.user_id, 
+            sender_id: student.user_id,       
             content: newMessage.trim(),
+            is_read: false // Default it to false para sa admin
         });
 
         if (error) {
@@ -656,7 +696,7 @@ export default function StudentDashboard() {
                                     <p className="text-[10px] text-green-100">Send a message to the CSSO Officers</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsChatOpen(false)} className="text-green-100 hover:text-white rounded-full p-1 hover:bg-green-700 transition">
+                            <button onClick={() => toggleChat()} className="text-green-100 hover:text-white rounded-full p-1 hover:bg-green-700 transition">
                                 <X size={20} />
                             </button>
                         </div>
@@ -685,8 +725,9 @@ export default function StudentDashboard() {
                                             }`}>
                                                 {formatMessageWithLinks(msg.content, isMe)}
                                             </div>
+                                            {/* --- DATE AND TIME FORMAT UPDATED HERE --- */}
                                             <span className="text-[9px] text-slate-400 mt-1 mx-1">
-                                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                {new Date(msg.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
                                     )
@@ -697,22 +738,19 @@ export default function StudentDashboard() {
 
                         {/* Input Area */}
                         <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
-                            {/* --- CHANGED TO TEXTAREA TO SUPPORT MULTI-LINE --- */}
                             <form onSubmit={(e) => handleSendMessage(e)} className="flex gap-2 relative items-end">
                                 <textarea 
                                     value={newMessage}
                                     onChange={(e) => {
                                         setNewMessage(e.target.value);
-                                        // Auto-resize magic
                                         e.target.style.height = 'auto';
                                         e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
                                     }}
                                     onKeyDown={(e) => {
-                                        // Send on Enter, Next Line on Shift+Enter
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
                                             handleSendMessage();
-                                            e.currentTarget.style.height = 'auto'; // Reset height after sending
+                                            e.currentTarget.style.height = 'auto'; 
                                         }
                                     }}
                                     placeholder="Type a message..."
@@ -734,7 +772,7 @@ export default function StudentDashboard() {
 
                 {/* Floating Button */}
                 <button 
-                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    onClick={() => toggleChat()}
                     className={`h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${
                         isChatOpen ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-green-600 text-white hover:bg-green-700'
                     }`}

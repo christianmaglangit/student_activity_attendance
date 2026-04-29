@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -41,6 +41,7 @@ type ChatMessage = {
     sender_id: string;
     content: string;
     created_at: string;
+    is_read?: boolean;
 };
 
 // --- FULL SCREEN LOADER COMPONENT ---
@@ -326,7 +327,6 @@ export default function StudentListPage() {
         return encrypted;
     };
 
-    // --- FUNCTION TO RENDER CLICKABLE LINKS ---
     const formatMessageWithLinks = (text: string, isAdmin: boolean) => {
         const urlRegex = /(https?:\/\/[^\s]+)/g;
         const parts = text.split(urlRegex);
@@ -349,15 +349,36 @@ export default function StudentListPage() {
         });
     };
 
+    // --- UPDATED: FETCH USER AND OFFLINE UNREAD MESSAGES ---
     useEffect(() => {
-        const fetchUser = async () => {
+        const fetchUserAndUnread = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setUserEmail(user.email || null);
                 setAdminId(user.id);
+
+                // Fetch historic unread messages sent while offline
+                // USING .or() to catch BOTH 'false' and 'null' values in 'is_read'
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('conversation_id')
+                    .neq('sender_id', user.id)
+                    .or('is_read.eq.false,is_read.is.null'); 
+
+                if (error) {
+                    console.error("Error fetching unread messages:", error);
+                }
+
+                if (data) {
+                    const counts: Record<string, number> = {};
+                    data.forEach(msg => {
+                        counts[msg.conversation_id] = (counts[msg.conversation_id] || 0) + 1;
+                    });
+                    setUnreadMessages(counts);
+                }
             }
         };
-        fetchUser();
+        fetchUserAndUnread();
     }, []);
 
     useEffect(() => {
@@ -387,16 +408,17 @@ export default function StudentListPage() {
                 (payload) => {
                     const newMsg = payload.new as ChatMessage;
                     
-                    // If the sender is the admin, do nothing (we handle it optimistically)
                     if (newMsg.sender_id === adminId) return;
 
                     const isOpen = chatModalOpenRef.current;
                     const activeStudent = activeChatStudentRef.current;
 
-                    // Check if we are currently chatting with the person who sent this message
                     if (isOpen && activeStudent?.user_id === newMsg.conversation_id) {
                         // We are actively chatting with them, append the message instantly!
                         setChatMessages(prev => [...prev, newMsg]);
+                        
+                        // Mark as read immediately in database so it doesn't pile up
+                        supabase.from('messages').update({ is_read: true }).eq('id', newMsg.id).then();
                     } else {
                         // We are NOT chatting with them, increment their unread badge!
                         setUnreadMessages(prev => ({
@@ -537,7 +559,7 @@ export default function StudentListPage() {
     };
 
     // --- HANDLE CHAT MODAL TRIGGER ---
-    const handleChat = (student: Student) => {
+    const handleChat = async (student: Student) => {
         if (!student.user_id) {
             Swal.fire({ 
                 title: 'No Account', 
@@ -548,12 +570,22 @@ export default function StudentListPage() {
             return;
         }
         
-        // Reset unread count for this student when opened
+        // Reset unread count for this student in local state
         setUnreadMessages(prev => {
             const updated = { ...prev };
             delete updated[student.user_id];
             return updated;
         });
+
+        // --- UPDATED: DATABASE MARK AS READ ---
+        if (adminId) {
+            await supabase
+                .from('messages')
+                .update({ is_read: true })
+                .eq('conversation_id', student.user_id)
+                .neq('sender_id', adminId)
+                .or('is_read.eq.false,is_read.is.null'); // Update false and null
+        }
 
         setActiveChatStudent(student);
         setChatModalOpen(true);
@@ -579,7 +611,8 @@ export default function StudentListPage() {
             conversation_id: activeChatStudent.user_id,
             sender_id: adminId,
             content: msgContent,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            is_read: true // Since we send it, we already "read" it
         };
         
         setChatMessages(prev => [...prev, optimisticMsg]);
@@ -588,7 +621,8 @@ export default function StudentListPage() {
         const { error } = await supabase.from('messages').insert({
             conversation_id: activeChatStudent.user_id,
             sender_id: adminId,
-            content: msgContent
+            content: msgContent,
+            is_read: false // Default to unread for the student
         });
 
         if (error) {
@@ -606,7 +640,6 @@ export default function StudentListPage() {
         e.preventDefault();
         if (!broadcastMessage.trim() || !adminId) return;
 
-        // Target only students CURRENTLY FILTERED in the table who have user_ids
         const targetStudents = filteredStudents.filter(s => s.user_id);
 
         if (targetStudents.length === 0) {
@@ -616,11 +649,11 @@ export default function StudentListPage() {
 
         setIsBroadcasting(true);
 
-        // Prepare the array of inserts
         const inserts = targetStudents.map(student => ({
             conversation_id: student.user_id,
             sender_id: adminId,
-            content: broadcastMessage.trim()
+            content: broadcastMessage.trim(),
+            is_read: false // Default to unread for the student
         }));
 
         const { error } = await supabase.from('messages').insert(inserts);
@@ -758,7 +791,7 @@ export default function StudentListPage() {
                 count: unreadMessages[userId]
             };
         })
-        .filter(n => n.student); // Only show if we found the matching student
+        .filter(n => n.student); 
 
     return (
         <>
@@ -1111,8 +1144,9 @@ export default function StudentListPage() {
                                             }`}>
                                                 {formatMessageWithLinks(msg.content, isAdmin)}
                                             </div>
+                                            {/* --- DATE AND TIME DISPLAY ADDED HERE --- */}
                                             <span className="text-[9px] text-slate-400 mt-1 mx-1">
-                                                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(msg.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
                                     )

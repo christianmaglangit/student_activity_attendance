@@ -32,7 +32,7 @@ type ActivityType = {
     user_id: string;
     activity_schedules: ActivitySchedule[];
     activity_type: 'whole_day' | 'half_day_am' | 'half_day_pm';
-    target_years?: string[]; // ADDED: Field for target year levels
+    target_years?: string[]; 
 };
 
 type ReportRow = {
@@ -224,7 +224,7 @@ export default function ActivityPage() {
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     const [activityType, setActivityType] = useState<'whole_day' | 'half_day_am' | 'half_day_pm'>('whole_day');
     
-    // ADDED: Target Years State (Default to all years selected)
+    // Target Years State
     const [targetYears, setTargetYears] = useState<string[]>(YEAR_LEVELS);
     
     // STATES FOR OUT REQUIREMENTS
@@ -360,7 +360,7 @@ export default function ActivityPage() {
         setMessage('');
         setSelectedActivity(null);
         setActivityType('whole_day');
-        setTargetYears(YEAR_LEVELS); // Reset to Whole Department
+        setTargetYears(YEAR_LEVELS); 
         setRequireAmOut(true); 
         setRequirePmOut(true);
     };
@@ -387,7 +387,6 @@ export default function ActivityPage() {
     const handleAddActivity = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Validation check for Target Years
         if (targetYears.length === 0) {
             setMessage("Please select at least one target year level.");
             return;
@@ -404,12 +403,12 @@ export default function ActivityPage() {
         const { data: newActivity, error: activityError } = await supabase
             .from('activities')
             .insert({
-                name: activityName,
+                name: activityName, // The text is already uppercased via onChange
                 start_date: startDate,
                 end_date: endDate,
                 user_id: user.id,
                 activity_type: activityType,
-                target_years: targetYears // ADDED: Saving Target Years
+                target_years: targetYears 
             })
             .select()
             .single();
@@ -470,7 +469,6 @@ export default function ActivityPage() {
         e.preventDefault();
         if (!selectedActivity) return;
         
-        // Validation check for Target Years
         if (targetYears.length === 0) {
             setMessage("Please select at least one target year level.");
             return;
@@ -486,7 +484,7 @@ export default function ActivityPage() {
                 start_date: startDate, 
                 end_date: endDate, 
                 activity_type: activityType,
-                target_years: targetYears // ADDED: Updating Target Years
+                target_years: targetYears 
             })
             .eq('id', selectedActivity.id);
 
@@ -546,7 +544,6 @@ export default function ActivityPage() {
         setLoading(false);
     };
 
-    // --- BULK DELETE HANDLER ---
     const handleBulkDelete = async () => {
         if (selectedActivityIds.size === 0) return;
         setLoading(true);
@@ -568,7 +565,7 @@ export default function ActivityPage() {
 
     const openEditModal = (activity: ActivityType) => {
         setSelectedActivity(activity);
-        setActivityName(activity.name);
+        setActivityName(activity.name.toUpperCase()); // Set as uppercase
         setStartDate(activity.start_date);
         setEndDate(activity.end_date);
         
@@ -578,7 +575,6 @@ export default function ActivityPage() {
         setSchedules(processedSchedules);
         setActivityType(activity.activity_type || 'whole_day');
         
-        // ADDED: Set Target Years when editing (default to whole department if null)
         setTargetYears(activity.target_years || YEAR_LEVELS);
 
         const hasAmOut = processedSchedules.some(s => s.am_out !== null);
@@ -655,7 +651,10 @@ export default function ActivityPage() {
         const pageWidth = doc.internal.pageSize.getWidth();
         doc.setFontSize(16); doc.setTextColor(0); doc.text(userProfile.name, pageWidth / 2, 20, { align: "center" });
         doc.setFontSize(14); doc.setTextColor(0); doc.text(userProfile.collegedep || '', pageWidth / 2, 28, { align: "center" });
-        doc.setFontSize(12); doc.setTextColor(0); doc.text(`${selectedActivity.name} ATTENDANCE `, pageWidth / 2, 36, { align: "center" });
+        
+        // Uppercase PDF Title
+        doc.setFontSize(12); doc.setTextColor(0); doc.text(`${selectedActivity.name.toUpperCase()} ATTENDANCE `, pageWidth / 2, 36, { align: "center" });
+        
         doc.setFontSize(11); doc.setTextColor(100);
         const formattedStartDate = formatDate(selectedActivity.start_date); const formattedEndDate = formatDate(selectedActivity.end_date);
         const dateString = formattedStartDate === formattedEndDate ? formattedStartDate : `${formattedStartDate} to ${formattedEndDate}`;
@@ -793,7 +792,8 @@ export default function ActivityPage() {
                                         </div>
 
                                         <div className="flex flex-col sm:flex-row justify-center items-center text-center sm:text-left gap-2 mb-2 pl-6">
-                                            <h3 className="text-xl font-bold text-green-600">{activity.name}</h3>
+                                            {/* UPPERCASE APPLIED HERE */}
+                                            <h3 className="text-xl font-bold text-green-600 uppercase">{activity.name}</h3>
                                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                                                 activity.activity_type === 'half_day_am' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
                                                 : activity.activity_type === 'half_day_pm' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300'
@@ -803,7 +803,6 @@ export default function ActivityPage() {
                                             </span>
                                         </div>
 
-                                        {/* ADDED: Target Years Badge Display */}
                                         <div className="flex flex-wrap gap-1 justify-center mb-3">
                                             {activity.target_years && activity.target_years.length === YEAR_LEVELS.length ? (
                                                 <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300 font-medium">Whole Department</span>
@@ -860,9 +859,16 @@ export default function ActivityPage() {
              {/* Add/Edit Modal */}
             <Modal isOpen={isAddModalOpen || isEditModalOpen} onClose={closeModal} title={isEditModalOpen ? 'Edit Activity' : 'Create New Activity'} size="lg">
                  <form onSubmit={isEditModalOpen ? handleUpdateActivity : handleAddActivity} className="space-y-6">
-                     <Input label="Activity Name" id="activity-name" type="text" required value={activityName} onChange={(e) => setActivityName(e.target.value)} />
+                     {/* UPPERCASE INPUT UPDATE */}
+                     <Input 
+                        label="Activity Name" 
+                        id="activity-name" 
+                        type="text" 
+                        required 
+                        value={activityName} 
+                        onChange={(e) => setActivityName(e.target.value.toUpperCase())} 
+                     />
 
-                     {/* ADDED: Target Participants Selection */}
                      <div>
                          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Target Participants</label>
                          <div className="flex flex-wrap gap-3 mb-2">
@@ -898,7 +904,6 @@ export default function ActivityPage() {
                          </div>
                      </div>
 
-                     {/* Activity Type Radio Buttons */}
                      <div>
                          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Activity Type</label>
                          <div className="flex flex-col sm:flex-row gap-4 mb-4">
@@ -916,7 +921,6 @@ export default function ActivityPage() {
                              </label>
                          </div>
 
-                         {/* Sign Out Requirements */}
                          <div className="flex flex-col sm:flex-row gap-4">
                              {(activityType === 'whole_day' || activityType === 'half_day_am') && (
                                  <label className="flex items-center gap-2">
@@ -933,13 +937,11 @@ export default function ActivityPage() {
                          </div>
                      </div>
 
-                     {/* Date Inputs */}
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <Input label="Start Date" id="start-date" type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                          <Input label="End Date" id="end-date" type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} min={startDate} />
                      </div>
 
-                     {/* Schedule Inputs */}
                      {schedules.length > 0 && (
                          <div className="space-y-4 border-t pt-4 dark:border-gray-700">
                              <h4 className="font-semibold text-lg">Set Time Schedules (Optional - uses defaults if left blank)</h4>
@@ -981,7 +983,8 @@ export default function ActivityPage() {
             {/* Single Delete Confirmation Modal */}
             <Modal isOpen={isDeleteModalOpen} onClose={closeModal} title="Confirm Deletion" size="sm">
                 <div className="text-center">
-                    <p className="mb-6">Are you sure you want to delete <span className="font-bold">{selectedActivity?.name}</span>? This action cannot be undone.</p>
+                    {/* UPPERCASE IN DELETE MODAL */}
+                    <p className="mb-6">Are you sure you want to delete <span className="font-bold uppercase">{selectedActivity?.name}</span>? This action cannot be undone.</p>
                     {message && <p className="text-red-500 text-sm mb-4">{message}</p>}
                     <div className="flex justify-center gap-4">
                         <Button variant="secondary" onClick={closeModal} disabled={loading}>Cancel</Button>
@@ -1002,8 +1005,8 @@ export default function ActivityPage() {
                 </div>
             </Modal>
 
-            {/* Report Modal */}
-            <Modal isOpen={isReportModalOpen} onClose={closeModal} title={`Attendance Report: ${selectedActivity?.name}`} size="xl">
+            {/* Report Modal - TITLE UPDATED */}
+            <Modal isOpen={isReportModalOpen} onClose={closeModal} title={`Attendance Report: ${selectedActivity?.name?.toUpperCase()}`} size="xl">
                 {reportLoading ? ( <div className="text-center py-10"><Loader2 className="animate-spin inline mr-2" /> Loading Report...</div> ) : (
                     <>
                         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
@@ -1053,7 +1056,7 @@ export default function ActivityPage() {
                                                 <tr key={student.student_id} className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-600">
                                                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{index + 1}</td>
                                                     <td className="px-6 py-4 font-mono text-gray-900 dark:text-white">{student.student_id}</td>
-                                                    <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">{student.full_name}</td>
+                                                    <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white uppercase">{student.full_name}</td>
                                                     <td className="px-6 py-4">{student.course} - {student.year_level}</td>
                                                     {(selectedActivity?.activity_type === 'whole_day' || selectedActivity?.activity_type === 'half_day_am') && (
                                                         <>
