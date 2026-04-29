@@ -245,6 +245,26 @@ export default function StudentDashboard() {
 
                 if (activities && schedules && attendance) {
                     activities.forEach(act => {
+                        // --- ADDED: CHECK ELIGIBILITY ---
+                        const targetYears = act.target_years;
+                        let isEligible = true;
+
+                        // Check if activity has restricted year levels
+                        if (targetYears && targetYears.length > 0) {
+                            const studentYearStr = String(studentData.year_level);
+                            const studentYearDigit = studentYearStr.match(/\d/)?.[0] || studentYearStr.trim().toLowerCase();
+                            
+                            isEligible = targetYears.some((target: any) => {
+                                const targetStr = String(target);
+                                const targetDigit = targetStr.match(/\d/)?.[0] || targetStr.trim().toLowerCase();
+                                return studentYearDigit === targetDigit;
+                            });
+                        }
+
+                        // Completely skip this activity if the student is not eligible
+                        if (!isEligible) return; 
+                        // --------------------------------
+
                         const actScheds = schedules.filter(s => s.activity_id === act.id);
                         
                         let totalSlots = 0;

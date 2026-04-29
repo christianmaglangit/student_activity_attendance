@@ -6,14 +6,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Html5Qrcode } from 'html5-qrcode';
 import Swal from 'sweetalert2';
-import CryptoJS from 'crypto-js'; // <--- IMPORT CRYPTO-JS
+import CryptoJS from 'crypto-js'; 
 import {
     LayoutDashboard, Users, ClipboardList, QrCode, LogOut, UserCheck, Search, Camera, CameraOff,
     CheckCircle, AlertTriangle as WarningIcon, XCircle, Clock,
-    Activity
+    Activity as ActivityIcon 
 } from 'lucide-react';
 
-// --- SECRET KEY (Dapat same ni sa Student Dashboard) ---
+// --- SECRET KEY ---
 const QR_SECRET_KEY = process.env.NEXT_PUBLIC_QR_SECRET || 'attendance-system-secure-key-2024';
 
 type ActivitySchedule = {
@@ -32,6 +32,7 @@ type Activity = {
     start_date: string;
     end_date: string;
     activity_schedules: ActivitySchedule[];
+    target_years?: string[]; 
 };
 
 type Student = {
@@ -96,7 +97,7 @@ const SidebarContent = ({ onLogout }: { onLogout: () => void }) => (
                 <NavLink href="/dashboard/student-list" icon={Users}>Student List</NavLink>
                 <NavLink href="/dashboard/activity" icon={ClipboardList}>Activity</NavLink>
                 <NavLink href="/dashboard/scan-attendance" icon={QrCode}>Scan Attendance</NavLink>
-                <NavLink href="/dashboard/fines-report" icon={Activity}>Fines Report</NavLink>
+                <NavLink href="/dashboard/fines-report" icon={ActivityIcon}>Fines Report</NavLink>
             </nav>
         </div>
         <div className="mt-auto p-4 border-t dark:border-slate-800">
@@ -143,7 +144,7 @@ const BottomNavBar = () => {
                     </Link>
                 </div>
                 <BottomNavLink href="/dashboard/activity" icon={ClipboardList}>Activity</BottomNavLink>
-                <BottomNavLink href="/dashboard/fines-report" icon={Activity}>Fines</BottomNavLink>
+                <BottomNavLink href="/dashboard/fines-report" icon={ActivityIcon}>Fines</BottomNavLink>
             </div>
             <div className="text-center pb-1">
                 <p className="text-xs text-slate-500 dark:text-slate-400">Developed by: <strong>Christian B. Maglangit</strong></p>
@@ -193,9 +194,10 @@ export default function ScanAttendancePage() {
     }, []);
 
     useEffect(() => {
+        let scanner: Html5Qrcode | null = null;
+
         if (isCameraOn && selectedActivity) {
-            const scannerId = 'reader';
-            const html5QrCode = new Html5Qrcode(scannerId);
+            scanner = new Html5Qrcode('reader');
             let isProcessing = false;
 
             const determineAttendanceStatus = (activity: Activity): { status: string, type: 'success' | 'warning' | 'error' } => {
@@ -243,26 +245,23 @@ export default function ScanAttendancePage() {
                 try {
                     let studentId = '';
 
-                    // 1. ATTEMPT DECRYPTION FIRST
                     try {
                         const bytes = CryptoJS.AES.decrypt(decodedText, QR_SECRET_KEY);
                         const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
                         if (decryptedStr) {
                             const parsed = JSON.parse(decryptedStr);
                             studentId = parsed.student_id;
-                            console.log("Decrypted ID:", studentId);
                         }
                     } catch (err) {
                         console.log("Not encrypted, trying raw...");
                     }
 
-                    // 2. FALLBACK TO RAW TEXT (Legacy Support)
                     if (!studentId) {
                         try {
                             const qrData = JSON.parse(decodedText);
                             studentId = qrData.student_id;
                         } catch (e) {
-                            studentId = decodedText; // Assumption: raw ID string
+                            studentId = decodedText; 
                         }
                     }
 
@@ -281,6 +280,40 @@ export default function ScanAttendancePage() {
                         await Swal.fire({ icon: 'error', title: 'Not Found', text: `Student ID "${studentId}" not found.`, timer: 2500, showConfirmButton: false });
                         return;
                     }
+
+                    // --- TARGET YEARS RESTRICTION CHECK ---
+                    const targetYears = selectedActivity!.target_years;
+                    
+                    if (targetYears && targetYears.length > 0) {
+                        const studentYearStr = String(studentData.year_level);
+                        const studentYearDigit = studentYearStr.match(/\d/)?.[0] || studentYearStr.trim().toLowerCase();
+                        
+                        const isAllowed = targetYears.some(target => {
+                            const targetStr = String(target);
+                            const targetDigit = targetStr.match(/\d/)?.[0] || targetStr.trim().toLowerCase();
+                            return studentYearDigit === targetDigit;
+                        });
+
+                        if (!isAllowed) {
+                            const warningRecord: AttendanceRecord = { 
+                                ...studentData, 
+                                scanTime: new Date().toLocaleTimeString(), 
+                                status: `Restricted: For ${targetYears.join(', ')} only`, 
+                                statusType: 'error' 
+                            };
+                            setScannedStudents(prev => [warningRecord, ...prev]);
+
+                            await Swal.fire({ 
+                                icon: 'error', 
+                                title: 'Restricted Year Level', 
+                                text: `This activity is restricted to: ${targetYears.join(', ')}. ${studentData.full_name} is in ${studentData.year_level}.`, 
+                                timer: 3500, 
+                                showConfirmButton: false 
+                            });
+                            return;
+                        }
+                    }
+                    // ---------------------------------------------
 
                     const attendance = determineAttendanceStatus(selectedActivity!);
 
@@ -329,40 +362,39 @@ export default function ScanAttendancePage() {
 
             const config = {
                 fps: 10,
+                // Make qrbox responsive to the screen but bounded
                 qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
                     const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                    const size = Math.max(250, Math.floor(minEdge * 0.8));
-                    return { width: size, height: size, };
+                    const size = Math.max(200, Math.floor(minEdge * 0.7)); // Adjusted for better sizing
+                    return { width: size, height: size };
                 },
-                disableFlip: true
+                disableFlip: true,
+                aspectRatio: 1.0 // Force square aspect ratio
             };
 
-            html5QrCode.start({ facingMode: "environment" }, config, processScan, () => { })
+            scanner.start({ facingMode: "environment" }, config, processScan, () => { })
                 .catch(async (err) => {
                     console.error("Camera Start Error:", err);
                     Swal.fire({
                         icon: 'error',
                         title: 'Camera Error',
-                        text: `Failed to start scanner. Ensure your browser grants camera permission and that you are using HTTPS. Error: ${err.message || err.toString()}`,
+                        text: `Failed to start scanner. Ensure your browser grants camera permission.`,
                         confirmButtonText: 'OK'
                     });
                     setCameraOn(false);
                 });
-
-            return () => {
-                const stopScanner = async () => {
-                    if (html5QrCode && html5QrCode.isScanning) {
-                        try {
-                            await html5QrCode.stop();
-                            console.log("HTML5-Qrcode stopped successfully.");
-                        } catch (err) {
-                            console.warn("Failed to stop the scanner cleanly.", err);
-                        }
-                    }
-                };
-                stopScanner();
-            };
         }
+
+        // --- IMPROVED CLEANUP ---
+        return () => {
+            if (scanner && scanner.isScanning) {
+                scanner.stop().then(() => {
+                    scanner?.clear();
+                }).catch((err) => {
+                    console.warn("Error stopping scanner (normal on fast unmount):", err);
+                });
+            }
+        };
     }, [isCameraOn, selectedActivity]);
 
     useEffect(() => {
@@ -427,7 +459,7 @@ export default function ScanAttendancePage() {
                     <div className="grid lg:grid-cols-3 gap-6 items-start">
                         <div className="p-6 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-4 lg:col-span-2">
                             <div className="flex justify-between items-center gap-4">
-                                <div className="relative flex-grow">
+                                <div className="relative flex-grow z-50">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                     <input
                                         id="activity-search"
@@ -446,22 +478,28 @@ export default function ScanAttendancePage() {
                                     )}
                                 </div>
                                 {currentDateTime && (
-                                    <p className="text-sm font-medium text-green-600 dark:text-green-400 flex-shrink-0">{currentDateTime.toLocaleTimeString()}</p>
+                                    <p className="text-sm font-medium text-green-600 dark:text-green-400 flex-shrink-0 hidden sm:block">
+                                        {currentDateTime.toLocaleTimeString()}
+                                    </p>
                                 )}
                             </div>
 
-                            <div className="w-full aspect-square lg:h-[500px] dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center">
-                                <div id="reader" className="justify-center w-full h-full"></div>
+                            {/* --- UPDATED CAMERA BOX --- */}
+                            {/* Gigamitan nato og arbitrary variants [&_video] para ma-force niya ang object-fit ug mapatay ang sobra nga default styles sa html5-qrcode */}
+                            <div className="w-full aspect-square md:aspect-video lg:h-[400px] bg-slate-100 dark:bg-slate-800/50 rounded-lg overflow-hidden relative flex items-center justify-center border border-slate-200 dark:border-slate-700 [&_video]:object-cover [&_video]:w-full [&_video]:h-full [&_#reader__scan_region]:mx-auto">
+                                
+                                <div id="reader" className="w-full h-full flex items-center justify-center border-none"></div>
 
                                 {!isCameraOn && (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4">
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 p-4 bg-slate-100 dark:bg-slate-800/80 z-10">
                                         <CameraOff size={48} className="mb-2" />
-                                        <p className='text-center text-sm'>
+                                        <p className='text-center text-sm font-medium'>
                                             {!selectedActivity ? "Please select an activity first." : "Scanner is off. Click 'Start Scanner'."}
                                         </p>
                                     </div>
                                 )}
                             </div>
+
                             <Button onClick={() => setCameraOn(prev => !prev)} disabled={!selectedActivity} className='w-full flex items-center justify-center gap-2' variant={isCameraOn ? 'danger' : 'primary'}>
                                 {isCameraOn ? <><CameraOff size={18} /> Stop Scanner</> : <><Camera size={18} /> Start Scanner</>}
                             </Button>

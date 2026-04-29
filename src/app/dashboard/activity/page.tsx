@@ -32,6 +32,7 @@ type ActivityType = {
     user_id: string;
     activity_schedules: ActivitySchedule[];
     activity_type: 'whole_day' | 'half_day_am' | 'half_day_pm';
+    target_years?: string[]; // ADDED: Field for target year levels
 };
 
 type ReportRow = {
@@ -50,6 +51,9 @@ type UserProfile = {
     name: string;
     collegedep: string | null;
 };
+
+// --- CONSTANTS ---
+const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
 // --- HELPER COMPONENTS ---
 const NavLink = ({ href, icon: Icon, children }: { href: string; icon: React.ElementType; children: React.ReactNode; }) => {
@@ -220,6 +224,9 @@ export default function ActivityPage() {
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     const [activityType, setActivityType] = useState<'whole_day' | 'half_day_am' | 'half_day_pm'>('whole_day');
     
+    // ADDED: Target Years State (Default to all years selected)
+    const [targetYears, setTargetYears] = useState<string[]>(YEAR_LEVELS);
+    
     // STATES FOR OUT REQUIREMENTS
     const [requireAmOut, setRequireAmOut] = useState(true);
     const [requirePmOut, setRequirePmOut] = useState(true);
@@ -353,6 +360,7 @@ export default function ActivityPage() {
         setMessage('');
         setSelectedActivity(null);
         setActivityType('whole_day');
+        setTargetYears(YEAR_LEVELS); // Reset to Whole Department
         setRequireAmOut(true); 
         setRequirePmOut(true);
     };
@@ -378,6 +386,13 @@ export default function ActivityPage() {
 
     const handleAddActivity = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Validation check for Target Years
+        if (targetYears.length === 0) {
+            setMessage("Please select at least one target year level.");
+            return;
+        }
+
         setLoading(true);
         setMessage('');
         const { data: { user } } = await supabase.auth.getUser();
@@ -393,7 +408,8 @@ export default function ActivityPage() {
                 start_date: startDate,
                 end_date: endDate,
                 user_id: user.id,
-                activity_type: activityType
+                activity_type: activityType,
+                target_years: targetYears // ADDED: Saving Target Years
             })
             .select()
             .single();
@@ -453,12 +469,25 @@ export default function ActivityPage() {
     const handleUpdateActivity = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedActivity) return;
+        
+        // Validation check for Target Years
+        if (targetYears.length === 0) {
+            setMessage("Please select at least one target year level.");
+            return;
+        }
+
         setLoading(true);
         setMessage('');
 
         const { error: uErr } = await supabase
             .from('activities')
-            .update({ name: activityName, start_date: startDate, end_date: endDate, activity_type: activityType })
+            .update({ 
+                name: activityName, 
+                start_date: startDate, 
+                end_date: endDate, 
+                activity_type: activityType,
+                target_years: targetYears // ADDED: Updating Target Years
+            })
             .eq('id', selectedActivity.id);
 
         if (uErr) {
@@ -548,6 +577,9 @@ export default function ActivityPage() {
         }));
         setSchedules(processedSchedules);
         setActivityType(activity.activity_type || 'whole_day');
+        
+        // ADDED: Set Target Years when editing (default to whole department if null)
+        setTargetYears(activity.target_years || YEAR_LEVELS);
 
         const hasAmOut = processedSchedules.some(s => s.am_out !== null);
         const hasPmOut = processedSchedules.some(s => s.pm_out !== null);
@@ -770,6 +802,18 @@ export default function ActivityPage() {
                                                 {activity.activity_type === 'half_day_am' ? 'HD (AM)' : activity.activity_type === 'half_day_pm' ? 'HD (PM)' : 'WD'}
                                             </span>
                                         </div>
+
+                                        {/* ADDED: Target Years Badge Display */}
+                                        <div className="flex flex-wrap gap-1 justify-center mb-3">
+                                            {activity.target_years && activity.target_years.length === YEAR_LEVELS.length ? (
+                                                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300 font-medium">Whole Department</span>
+                                            ) : (
+                                                activity.target_years?.map(year => (
+                                                    <span key={year} className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded-full dark:bg-gray-700 dark:text-gray-300 font-medium">{year}</span>
+                                                ))
+                                            )}
+                                        </div>
+
                                         <div className="flex items-center gap-2 justify-center text-sm text-gray-500 dark:text-gray-400 mb-4">
                                             <CalendarDays size={16} /><span>{formatDate(activity.start_date)}</span>
                                             {activity.start_date !== activity.end_date && <><span>-</span><span>{formatDate(activity.end_date)}</span></>}
@@ -817,6 +861,42 @@ export default function ActivityPage() {
             <Modal isOpen={isAddModalOpen || isEditModalOpen} onClose={closeModal} title={isEditModalOpen ? 'Edit Activity' : 'Create New Activity'} size="lg">
                  <form onSubmit={isEditModalOpen ? handleUpdateActivity : handleAddActivity} className="space-y-6">
                      <Input label="Activity Name" id="activity-name" type="text" required value={activityName} onChange={(e) => setActivityName(e.target.value)} />
+
+                     {/* ADDED: Target Participants Selection */}
+                     <div>
+                         <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Target Participants</label>
+                         <div className="flex flex-wrap gap-3 mb-2">
+                             <label className={`flex items-center gap-2 p-2 border-2 rounded-lg cursor-pointer transition-colors ${targetYears.length === YEAR_LEVELS.length ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 dark:border-purple-500' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                                 <input
+                                     type="checkbox"
+                                     checked={targetYears.length === YEAR_LEVELS.length}
+                                     onChange={(e) => {
+                                         if (e.target.checked) setTargetYears(YEAR_LEVELS);
+                                         else setTargetYears([]);
+                                     }}
+                                     className="form-checkbox h-4 w-4 text-purple-600 focus:ring-purple-500 rounded"
+                                 />
+                                 <span className="text-sm font-medium">Whole Department</span>
+                             </label>
+                             {YEAR_LEVELS.map(year => (
+                                 <label key={year} className={`flex items-center gap-2 p-2 border-2 rounded-lg cursor-pointer transition-colors ${targetYears.includes(year) ? 'border-green-500 bg-green-50 dark:bg-green-900/30 dark:border-green-500' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                                     <input
+                                         type="checkbox"
+                                         checked={targetYears.includes(year)}
+                                         onChange={(e) => {
+                                             if (e.target.checked) {
+                                                 setTargetYears(prev => [...prev, year]);
+                                             } else {
+                                                 setTargetYears(prev => prev.filter(y => y !== year));
+                                             }
+                                         }}
+                                         className="form-checkbox h-4 w-4 text-green-600 focus:ring-green-500 rounded"
+                                     />
+                                     <span className="text-sm">{year}</span>
+                                 </label>
+                             ))}
+                         </div>
+                     </div>
 
                      {/* Activity Type Radio Buttons */}
                      <div>

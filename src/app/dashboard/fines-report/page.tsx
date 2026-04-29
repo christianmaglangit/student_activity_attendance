@@ -27,6 +27,7 @@ type Activity = {
     activity_type: string;
     collection_id: number | null;
     collections?: Collection;
+    target_years?: string[] | null; // ADDED: Target years for checking eligibility
 };
 
 type ActivitySchedule = {
@@ -42,7 +43,7 @@ type AttendanceReport = {
     id: number;
     activity_id: number;
     student_id: string;
-    status: string; // e.g., "Time In (AM)"
+    status: string;
     scanned_at: string;
 };
 
@@ -217,7 +218,7 @@ export default function ActivityReportPage() {
             // 4. Fetch Attendance (LOOPING PARA MAKUHA TANAN)
             let allAttendance: AttendanceReport[] = [];
             let page = 0;
-            const pageSize = 1000; // Kwaon nato tag 1,000 per batch
+            const pageSize = 1000;
             let fetchMore = true;
 
             while (fetchMore) {
@@ -229,25 +230,21 @@ export default function ActivityReportPage() {
                 if (batchError) throw batchError;
 
                 if (batchData && batchData.length > 0) {
-                    // I-combine ang bag-ong batch sa existing data
                     allAttendance = [...allAttendance, ...batchData as AttendanceReport[]];
-                    
-                    // Kung ang nakuha gamay ra sa 1000, meaning mao na to ang last batch
                     if (batchData.length < pageSize) {
                         fetchMore = false;
                     } else {
-                        page++; // Move to next page
+                        page++; 
                     }
                 } else {
-                    fetchMore = false; // Wala nay data
+                    fetchMore = false; 
                 }
             }
 
-            // Set state using the complete accumulated data
             setActivities(actData as Activity[]);
             setStudents(studData as Student[]);
             setSchedules(schedData as ActivitySchedule[]);
-            setAttendanceLogs(allAttendance); // Kani ang complete nga walay limit
+            setAttendanceLogs(allAttendance);
 
         } catch (error: unknown) { 
             if (error instanceof Error) console.error('Error loading data:', error.message); 
@@ -256,7 +253,7 @@ export default function ActivityReportPage() {
 
     useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
-    // --- DATA PROCESSING LOGIC (FIXED) ---
+    // --- DATA PROCESSING LOGIC ---
     const studentActivitySummaries = useMemo((): StudentActivitySummary[] => {
         const lowerSearch = searchQuery.toLowerCase();
 
@@ -266,7 +263,6 @@ export default function ActivityReportPage() {
             const actScheds = schedules.filter(s => s.activity_id === act.id);
             let total = 0;
             actScheds.forEach(sched => {
-                // Check for null or empty string explicitly
                 if (sched.am_in && sched.am_in !== "") total++;
                 if (sched.am_out && sched.am_out !== "") total++;
                 if (sched.pm_in && sched.pm_in !== "") total++;
@@ -277,20 +273,14 @@ export default function ActivityReportPage() {
 
         // 2. Map Attendance (STRICT MATCHING)
         const studentAttendanceMap = new Map<string, Map<number, Set<string>>>();
-        
-        // Only count these specific statuses to match scanning page logic
         const validStatuses = new Set(['Time In (AM)', 'Time Out (AM)', 'Time In (PM)', 'Time Out (PM)']);
 
         attendanceLogs.forEach(log => {
             if (!log.student_id) return;
-            if (!validStatuses.has(log.status)) return; // Ignore invalid statuses
+            if (!validStatuses.has(log.status)) return;
 
-            // NORMALIZE ID: Remove spaces and uppercase to ensure matching matches Student List
             const sId = log.student_id.trim().toUpperCase();
-            
-            // Normalize Activity ID to number
             const aId = Number(log.activity_id);
-            
             const status = log.status; 
 
             if (!studentAttendanceMap.has(sId)) {
@@ -298,42 +288,60 @@ export default function ActivityReportPage() {
             }
 
             const activitiesMap = studentAttendanceMap.get(sId)!;
-            
             if (!activitiesMap.has(aId)) {
                 activitiesMap.set(aId, new Set());
             }
 
-            // Using Set automatically handles duplicates (e.g. 2x AM In counts as 1)
             activitiesMap.get(aId)!.add(status); 
         });
 
-        // 3. Filter Students
+        // 3. Filter Students based on search
         const filteredStudents = students.filter(s => 
             s.full_name.toLowerCase().includes(lowerSearch) || 
             s.student_id.toLowerCase().includes(lowerSearch)
         );
 
-        // 4. Build Summary
+        // 4. Build Summary with ELIGIBILITY CHECK
         return filteredStudents.map(student => {
             const activityMap = new Map();
             let totalFines = 0;
             const normalizedStudentId = student.student_id.trim().toUpperCase();
 
             activities.forEach(act => {
-                const totalSlots = activityTotalSlots.get(act.id) || 0;
-                
-                // Get the unique set of scans for this student & activity
-                const uniqueScans = studentAttendanceMap.get(normalizedStudentId)?.get(act.id);
-                
-                // The size of the Set is the actual number of unique valid scans
-                const attended = uniqueScans ? uniqueScans.size : 0;
-                
-                const statusString = `${attended}/${totalSlots}`;
+                const targetYears = act.target_years;
+                let isEligible = true;
 
-                // --- FINE CALCULATION ---
-                const absences = Math.max(0, totalSlots - attended);
-                const finePerAbsence = 50; 
-                const activityFine = absences * finePerAbsence;
+                // Check if activity has restricted year levels
+                if (targetYears && targetYears.length > 0) {
+                    const studentYearStr = String(student.year_level);
+                    const studentYearDigit = studentYearStr.match(/\d/)?.[0] || studentYearStr.trim().toLowerCase();
+                    
+                    isEligible = targetYears.some(target => {
+                        const targetStr = String(target);
+                        const targetDigit = targetStr.match(/\d/)?.[0] || targetStr.trim().toLowerCase();
+                        return studentYearDigit === targetDigit;
+                    });
+                }
+
+                let attended = 0;
+                let totalSlots = 0;
+                let activityFine = 0;
+                let statusString = "";
+
+                if (!isEligible) {
+                    // DILI ALLOWED (No fine, "N/A" status)
+                    statusString = "N/A";
+                } else {
+                    // ALLOWED (Calculate normal fines and slots)
+                    totalSlots = activityTotalSlots.get(act.id) || 0;
+                    const uniqueScans = studentAttendanceMap.get(normalizedStudentId)?.get(act.id);
+                    attended = uniqueScans ? uniqueScans.size : 0;
+                    statusString = `${attended}/${totalSlots}`;
+
+                    const absences = Math.max(0, totalSlots - attended);
+                    const finePerAbsence = 50; 
+                    activityFine = absences * finePerAbsence;
+                }
 
                 totalFines += activityFine;
 
@@ -365,37 +373,19 @@ export default function ActivityReportPage() {
         doc.setFontSize(16); doc.text("Attendance Activity Report", pageWidth / 2, 20, { align: 'center' });
         doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 28, { align: 'center' });
 
-        // Define Headers
         const headRow1 = [
-            { 
-                content: 'ID Number', 
-                rowSpan: 2, 
-                // FIX: Use 'as const' instead of 'as "middle"'
-                styles: { valign: 'middle' as const, halign: 'center' as const } 
-            },
-            { 
-                content: 'Name', 
-                rowSpan: 2, 
-                // FIX: Use 'as const'
-                styles: { valign: 'middle' as const, halign: 'center' as const } 
-            },
+            { content: 'ID Number', rowSpan: 2, styles: { valign: 'middle' as const, halign: 'center' as const } },
+            { content: 'Name', rowSpan: 2, styles: { valign: 'middle' as const, halign: 'center' as const } },
             ...activities.map(act => ({ 
                 content: `${act.name}\n(${act.activity_type.toUpperCase().replace('_', ' ')})`, 
                 colSpan: 1, 
-                // FIX: Use 'as const'
                 styles: { halign: 'center' as const } 
             })),
-            { 
-                content: 'Total Fines', 
-                rowSpan: 2, 
-                // FIX: Use 'as const'
-                styles: { valign: 'middle' as const, halign: 'center' as const } 
-            }
+            { content: 'Total Fines', rowSpan: 2, styles: { valign: 'middle' as const, halign: 'center' as const } }
         ];
 
         const headRow2 = activities.map(() => ({ 
             content: 'STATUS', 
-            // FIX: Use 'as const'
             styles: { halign: 'center' as const, fontSize: 8 } 
         }));
 
@@ -510,7 +500,7 @@ export default function ActivityReportPage() {
                                               {activities.map(act => {
                                                   const data = student.activities.get(act.id);
                                                   return (
-                                                      <td key={act.id} className="px-4 py-4 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-medium">
+                                                      <td key={act.id} className={`px-4 py-4 border border-slate-300 dark:border-slate-700 font-medium ${data?.statusString === 'N/A' ? 'text-slate-400 dark:text-slate-500 italic' : 'text-slate-900 dark:text-white'}`}>
                                                           {data?.statusString || "0/0"}
                                                       </td>
                                                   );
