@@ -936,28 +936,32 @@ export default function StudentListPage() {
                                 )}
                                 
                                 {/* --- BROADCAST BUTTON --- */}
-                                <Button variant="secondary" onClick={() => setIsBroadcastModalOpen(true)} className="w-full sm:w-auto border-indigo-500 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-900">
+                                <Button variant="secondary" onClick={() => handleSecureAction(() => setIsBroadcastModalOpen(true))} className="w-full sm:w-auto border-indigo-500 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-900">
                                     <Megaphone size={16} className="mr-2" />
                                     <span>Broadcast</span>
                                 </Button>
 
-                                <Button variant="secondary" onClick={handleExportAllQrs} disabled={isExporting} className="w-full sm:w-auto">
+                                <Button variant="secondary" onClick={() => handleSecureAction(handleExportAllQrs)} disabled={isExporting} className="w-full sm:w-auto">
                                     <Archive size={16} className="mr-2" />
                                     <span>{isExporting ? 'Exporting...' : 'QRs'}</span>
                                 </Button>
-                                <Button variant="secondary" onClick={handleExportPDF} className="w-full sm:w-auto">
+                                
+                                <Button variant="secondary" onClick={() => handleSecureAction(handleExportPDF)} className="w-full sm:w-auto">
                                     <Download size={16} className="mr-2" />
                                     <span>PDF</span>
                                 </Button>
+                                
                                 <Button variant="secondary" onClick={() => handleSecureAction(executeSync)} disabled={isSyncing || loading} className="w-full sm:w-auto border-yellow-500 text-yellow-700 bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-900">
                                     <RefreshCw size={16} className={`mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
                                     <span>Sync</span>
                                 </Button>
+                                
                                 <Button variant="secondary" onClick={() => handleSecureAction(executeUnsync)} disabled={isUnsyncing || isSyncing || loading} className="w-full sm:w-auto border-red-500 text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900">
                                     <UserMinus size={16} className={`mr-2 ${isUnsyncing ? 'animate-pulse' : ''}`} />
                                     <span>Unsync</span>
                                 </Button>
-                                <Button variant="primary" onClick={() => setModalState({ type: 'add', student: null })} className="col-span-2 w-full sm:w-auto sm:col-span-1">
+                                
+                                <Button variant="primary" onClick={() => handleSecureAction(() => setModalState({ type: 'add', student: null }))} className="col-span-2 w-full sm:w-auto sm:col-span-1">
                                     <UserPlus size={16} className="mr-2" />
                                     Add Student
                                 </Button>

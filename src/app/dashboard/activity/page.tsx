@@ -767,8 +767,10 @@ export default function ActivityPage() {
                                     <Trash2 size={18} /> Delete ({selectedActivityIds.size})
                                 </Button>
                             )}
-                            <Button onClick={() => { setActivityType('whole_day'); clearForm(); setAddModalOpen(true); }} className="w-full md:w-auto flex items-center justify-center gap-2">
-                               <CalendarPlus size={18} /> Add Activity
+                            
+                            {/* --- ADD ACTIVITY WITH SECURE ACTION --- */}
+                            <Button onClick={() => handleSecureAction(() => { setActivityType('whole_day'); clearForm(); setAddModalOpen(true); })} className="w-full md:w-auto flex items-center justify-center gap-2">
+                            <CalendarPlus size={18} /> Add Activity
                             </Button>
                         </div>
                     </div>

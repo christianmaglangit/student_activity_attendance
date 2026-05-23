@@ -70,7 +70,7 @@ interface ModalProps {
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-opacity-60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-sm p-8 m-4 bg-gray-100 rounded-xl shadow-2xl dark:bg-gray-800" onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
           <X size={24} />
@@ -81,14 +81,13 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
   );
 };
 
-// --- LOGIN MODAL (UPDATED LOGIC) ---
+// --- SECURE LOGIN MODAL ---
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSwitchToSignUp: () => void;
 }
 
-const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSignUp }) => {
+const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -101,30 +100,16 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
     setMessage('');
 
     try {
-      // 1. Auth Login
       const { data: { user }, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
-        setMessage(`Error: ${error.message}`);
+        setMessage("Invalid login credentials."); // Vague error prevents email enumeration
         setLoading(false);
         return;
       }
 
       if (user) {
-        // 2. CHECK STUDENTS TABLE FIRST
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('student_id') 
-          .eq('user_id', user.id)
-          .maybeSingle(); // Safe query
-
-        if (studentData) {
-          onClose();
-          router.replace('/studentDashboard'); 
-          return;
-        }
-
-        // 3. CHECK USERS (ADMIN) TABLE SECOND
+        // 1. CHECK USERS (ADMIN) TABLE FIRST
         const { data: adminData } = await supabase
           .from('users')
           .select('id')
@@ -137,14 +122,27 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
           return;
         }
 
-        // 4. FALLBACK: No profile found
+        // 2. CHECK STUDENTS TABLE
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('student_id') 
+          .eq('user_id', user.id)
+          .maybeSingle(); 
+
+        if (studentData) {
+          onClose();
+          router.replace('/studentDashboard'); 
+          return;
+        }
+
+        // 3. FALLBACK: Force logout if no profile
         await supabase.auth.signOut();
-        setMessage("Access Denied: No student or admin profile found.");
+        setMessage("Access Denied: Unregistered account.");
         setLoading(false);
       }
     } catch (error) {
       console.error(error);
-      setMessage('An unexpected error occurred.');
+      setMessage('System error. Please try again later.');
       setLoading(false);
     }
   };
@@ -152,94 +150,22 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitchToSign
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome Back!</h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Sign in to continue.</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Secure Login</h2>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Authorized personnel only.</p>
       </div>
       <form onSubmit={handleLogin} className="mt-8 space-y-6">
         <Input label="Email Address" id="login-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input label="Password" id="login-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Checking account...' : 'Login'}
+          {loading ? 'Authenticating...' : 'Login'}
         </Button>
       </form>
-      {message && <p className={`mt-4 text-center text-sm ${message.startsWith('Error') || message.startsWith('Access') ? 'text-red-500' : 'text-green-600'}`}>{message}</p>}
-    </Modal>
-  );
-};
-
-// --- SIGN UP MODAL (FOR ADMINS) ---
-interface SignUpModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSwitchToLogin: () => void;
-}
-
-const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLogin }) => {
-  const router = useRouter();
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [collegeDep, setCollegeDep] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (password !== confirmPassword) {
-      setMessage("Error: Passwords do not match!");
-      return;
-    }
-    setLoading(true);
-    setMessage('');
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.signUp({ email, password });
-      if (authError) {
-        setMessage(`Error signing up: ${authError.message}`);
-        return;
-      }
-      if (user) {
-        // Insert into 'users' table (Admins)
-        const { error: insertError } = await supabase.from('users').insert({ id: user.id, name: fullName, email: email, collegedep: collegeDep });
-        if (insertError) {
-          setMessage(`Account created but failed to save profile: ${insertError.message}`);
-        } else {
-          onClose();
-          router.push('/dashboard');
-        }
-      }
-    } catch (error) {
-      setMessage('An unexpected error occurred.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose}>
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create Admin Account</h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Create an account to manage attendance.</p>
-      </div>
-      <form onSubmit={handleSignUp} className="mt-8 space-y-6">
-        <Input label="Full Name / College Name" id="signup-name" type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        <Input label="Organization / Department" id="signup-collegedep" type="text" value={collegeDep} onChange={(e) => setCollegeDep(e.target.value)} />
-        <Input label="Email Address" id="signup-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Input label="Password" id="signup-password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Input label="Confirm Password" id="signup-confirm-password" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+      {message && (
+        <div className="mt-4 flex items-center justify-center gap-2 text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm font-medium">
+            <AlertCircle size={16} />
+            {message}
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Creating Account...' : 'Create Account'}
-        </Button>
-      </form>
-      {message && <p className={`mt-4 text-center text-sm ${message.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>{message}</p>}
-      <p className="mt-6 text-sm text-center text-gray-600 dark:text-gray-400">
-        Have an account?{' '}
-        <button onClick={onSwitchToLogin} className="font-semibold text-green-600 hover:underline dark:text-green-400">
-          Login
-        </button>
-      </p>
+      )}
     </Modal>
   );
 };
@@ -247,12 +173,11 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSwitchToLo
 // --- HEADER ---
 interface HeaderProps {
   onLoginClick: () => void;
-  onSignUpClick: () => void;
   isMenuOpen: boolean;
   toggleMenu: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen, toggleMenu }) => {
+const Header: React.FC<HeaderProps> = ({ onLoginClick, isMenuOpen, toggleMenu }) => {
   return (
     <header className="sticky top-0 z-20 w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="container mx-auto">
@@ -265,7 +190,6 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen
           </div>
           <div className="hidden md:flex items-center gap-2 sm:gap-4">
             <Button variant="secondary" onClick={onLoginClick} className="w-auto">Login</Button>
-            {/* <Button variant="primary" onClick={onSignUpClick} className="w-auto">Sign Up</Button> */}
           </div>
           <div className="md:hidden">
             <button onClick={toggleMenu} aria-label="Toggle menu">
@@ -277,7 +201,6 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onSignUpClick, isMenuOpen
           <div className="md:hidden p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <div className="flex flex-col gap-4">
               <Button variant="secondary" onClick={() => { onLoginClick(); toggleMenu(); }}>Login</Button>
-              {/* <Button variant="primary" onClick={() => { onSignUpClick(); toggleMenu(); }}>Sign Up</Button> */}
             </div>
           </div>
         )}
@@ -302,7 +225,6 @@ const Footer: React.FC = () => {
 // --- HOME PAGE MAIN ---
 export default function HomePage() {
   const [isLoginOpen, setLoginOpen] = useState(false);
-  const [isSignUpOpen, setSignUpOpen] = useState(false);
   const [isMenuOpen, setMenuOpen] = useState(false);
   
   // SESSION CHECK STATE
@@ -310,35 +232,18 @@ export default function HomePage() {
   const router = useRouter();
 
   const toggleMenu = () => setMenuOpen(!isMenuOpen);
-  const openLogin = () => { setSignUpOpen(false); setLoginOpen(true); };
-  const openSignUp = () => { setLoginOpen(false); setSignUpOpen(true); };
-  const closeModals = () => { setLoginOpen(false); setSignUpOpen(false); };
+  const openLogin = () => setLoginOpen(true);
+  const closeModals = () => setLoginOpen(false);
 
   // --- STRICT WATERFALL SESSION CHECK ---
   useEffect(() => {
     const checkSession = async () => {
         setIsCheckingSession(true);
         
-        // 1. Check if device has an active session
         const { data: { user } } = await supabase.auth.getUser();
 
         if (user) {
-            console.log("Checking User Type for:", user.id);
-
-            // 2. Check STUDENTS table first
-            const { data: studentData } = await supabase
-                .from('students')
-                .select('student_id')
-                .eq('user_id', user.id)
-                .maybeSingle(); 
-
-            if (studentData) {
-                console.log("--> Found in Students. Redirecting to Student Dashboard.");
-                router.replace('/studentDashboard');
-                return;
-            }
-
-            // 3. If not Student, Check USERS (Admin) table
+            // Check Admin first
             const { data: adminData } = await supabase
                 .from('users')
                 .select('id')
@@ -346,19 +251,27 @@ export default function HomePage() {
                 .maybeSingle();
 
             if (adminData) {
-                console.log("--> Found in Users (Admin). Redirecting to Admin Dashboard.");
                 router.replace('/dashboard');
                 return;
             }
 
-            // 4. Fallback: User logged in but has no profile
-            // Safety measure: Log them out so they don't get stuck
-            console.warn("User has no profile in Students or Users. Forcing Logout.");
+            // Check Students
+            const { data: studentData } = await supabase
+                .from('students')
+                .select('student_id')
+                .eq('user_id', user.id)
+                .maybeSingle(); 
+
+            if (studentData) {
+                router.replace('/studentDashboard');
+                return;
+            }
+
+            // Fallback: User logged in but has no profile
             await supabase.auth.signOut();
             setIsCheckingSession(false);
 
         } else {
-            // No user logged in
             setIsCheckingSession(false);
         }
     };
@@ -371,17 +284,16 @@ export default function HomePage() {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-900">
               <Loader2 className="h-10 w-10 text-green-600 animate-spin mb-4" />
-              <p className="text-gray-600 dark:text-gray-300 font-medium">Authenticating...</p>
+              <p className="text-gray-600 dark:text-gray-300 font-medium">Verifying Secure Session...</p>
           </div>
       );
   }
 
   return (
     <div className="bg-gray-200 dark:bg-gray-900 min-h-screen">
-      <div className={`flex flex-col min-h-screen transition-all duration-300 ${isLoginOpen || isSignUpOpen ? 'blur-sm' : ''}`}>
+      <div className={`flex flex-col min-h-screen transition-all duration-300 ${isLoginOpen ? 'blur-sm' : ''}`}>
         <Header
           onLoginClick={openLogin}
-          onSignUpClick={openSignUp}
           isMenuOpen={isMenuOpen}
           toggleMenu={toggleMenu}
         />
@@ -395,8 +307,8 @@ export default function HomePage() {
               Simplify attendance tracking, reduce administrative tasks, and gain valuable insights with our seamless, modern platform.
             </p>
             <div className="mt-10">
-              <p className="text-sm text-gray-500">
-                Click &quot;Login&quot; in the header to access your account.
+              <p className="text-sm text-gray-500 font-semibold">
+                Authorized Personnel Only. Click "Login" to access the portal.
               </p>
             </div>
           </div>
@@ -404,8 +316,7 @@ export default function HomePage() {
         <Footer />
       </div>
 
-      <LoginModal isOpen={isLoginOpen} onClose={closeModals} onSwitchToSignUp={openSignUp} />
-      <SignUpModal isOpen={isSignUpOpen} onClose={closeModals} onSwitchToLogin={openLogin} />
+      <LoginModal isOpen={isLoginOpen} onClose={closeModals} />
     </div>
   );
 }
